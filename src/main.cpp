@@ -136,10 +136,9 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fast
     Pixel::Coor c;
     bool shift = isPressed(LSHIFT) || isPressed(RSHIFT);
     bool space = isPressed(SPACE);
+    auto window = p->getWindow();
+    int newH, newW, newP;
     switch (e.type){
-        case SDL_QUIT:
-            exit(0);
-
         case SDL_KEYDOWN:
             switch (e.key.keysym.scancode){
                 default: break;
@@ -164,16 +163,29 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fast
                 case SDL_SCANCODE_O:
                     map.camera = { 0, 0 };
                     break;
+
+                // enlarge and shrink pixels
+                case SDL_SCANCODE_M:
+                case SDL_SCANCODE_N:
+                    newP = e.key.keysym.scancode == SDL_SCANCODE_M ?
+                                window.pixelw+1 :
+                                window.pixelw == 1 ?
+                                    1 :
+                                    window.pixelw-1;
+                    newH = floor((float)window.h*window.pixelw/newP);
+                    newW = floor((float)window.w*window.pixelw/newP);
+                    p->resizeWindow(newH, newW, newP);
+                    break;
             }
             break;
     }
 
     // move camera
-    if (isPressed(W))      map.d_camera.y = -1;
-    else if (isPressed(S)) map.d_camera.y =  1;
+    if (isPressed(W))      map.d_camera.y = -(1+shift*2);
+    else if (isPressed(S)) map.d_camera.y =  1+shift*2;
     else                   map.d_camera.y =  0;
-    if (isPressed(A))      map.d_camera.x = -1;
-    else if (isPressed(D)) map.d_camera.x =  1;
+    if (isPressed(A))      map.d_camera.x = -(1+shift*2);
+    else if (isPressed(D)) map.d_camera.x =  1+shift*2;
     else                   map.d_camera.x =  0;
 
     // edit
@@ -193,7 +205,6 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fast
 int main(int argc, char** argv){
     parseArg(argc, argv);
     p = new Pixel(75, 100, 10, "Game of Life", 0);
-    auto window = p->getWindow();
     Map map;
 
     SDL_Event e;
@@ -205,13 +216,24 @@ int main(int argc, char** argv){
     int fastForward = 0;
 
     while(1){
+        auto window = p->getWindow();
         uint32_t frameStart = SDL_GetTicks();
 
         if (edit) SDL_WaitEvent(&e);
         else SDL_PollEvent(&e);
 
-        auto keyStates = SDL_GetKeyboardState(NULL);
-        keyboardCommands(e, map, cells, edit, fastForward, keyStates);
+        switch (e.type){
+            case SDL_QUIT:
+                exit(0);
+
+            case SDL_WINDOWEVENT:
+                p->resizeWindow(&e.window, p->getWindow().pixelw);
+                break;
+
+            default:
+                auto keyStates = SDL_GetKeyboardState(NULL);
+                keyboardCommands(e, map, cells, edit, fastForward, keyStates);
+        }
 
         map.camera.y += map.d_camera.y;
         map.camera.x += map.d_camera.x;
