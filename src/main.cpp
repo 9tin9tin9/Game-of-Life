@@ -2,6 +2,7 @@
 #include <pixel.hpp>
 #include <deque>
 #include <unordered_set>
+#include "helpmsg.hpp"
 
 Pixel* p;
 const int sectorWidth = 30;
@@ -82,10 +83,8 @@ struct Map{
 
 };
 
-void parseArg(int argc, char** argv)
-{
-    for (int i = 1; i < argc; i++)
-    {
+void parseArg(int argc, char** argv) {
+    for (int i = 1; i < argc; i++) {
         if (argv[i][0] != '-'){
             std::cout << "Unknown argument: " << argv[i] << std::endl;
             exit(1);
@@ -98,8 +97,7 @@ void parseArg(int argc, char** argv)
                     std::cout << "Unknown option: " << option << std::endl;
                     exit(1);
                 case 'h':
-#include "helpMsg.hpp"
-                    std::cout << helpMsg << std::endl;
+                    std::cout << helpmsg << std::endl;
                     exit(0);
             }
         }
@@ -130,6 +128,68 @@ bool checkLiveOrDie(Pixel::Coor c, Map& map){
         return false;
 }
 
+typedef std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> Cells;
+
+#define isPressed(k_) (keyStates[SDL_SCANCODE_##k_])
+
+void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fastForward, const uint8_t* keyStates){
+    Pixel::Coor c;
+    bool shift = isPressed(LSHIFT) || isPressed(RSHIFT);
+    bool space = isPressed(SPACE);
+    switch (e.type){
+        case SDL_QUIT:
+            exit(0);
+
+        case SDL_KEYDOWN:
+            switch (e.key.keysym.scancode){
+                default: break;
+                
+                // edit mode
+                case SDL_SCANCODE_E: edit = !edit; break;
+                // clear cells during edit mode
+                case SDL_SCANCODE_C:
+                    if (edit) {
+                       for (auto c : cells)
+                           map.at(c) = false;
+                       cells.clear();
+                    }
+                    break;
+                // fast forward
+                case SDL_SCANCODE_F: 
+                    if (shift) fastForward = 0;
+                    else fastForward++;
+                    break;
+
+                // back to origin
+                case SDL_SCANCODE_O:
+                    map.camera = { 0, 0 };
+                    break;
+            }
+            break;
+    }
+
+    // move camera
+    if (isPressed(W))      map.d_camera.y = -1;
+    else if (isPressed(S)) map.d_camera.y =  1;
+    else                   map.d_camera.y =  0;
+    if (isPressed(A))      map.d_camera.x = -1;
+    else if (isPressed(D)) map.d_camera.x =  1;
+    else                   map.d_camera.x =  0;
+
+    // edit
+    if (edit && space){
+        SDL_GetMouseState(&c.x, &c.y);
+        auto actual = map.actual(p->fromScreenCoor(c));
+        if (shift){
+            map.at(actual) = false;
+            cells.erase(actual);
+        }else{
+            map.at(actual) = true;
+            cells.insert(actual);
+        }
+    }
+}
+
 int main(int argc, char** argv){
     parseArg(argc, argv);
     p = new Pixel(75, 100, 10, "Game of Life", 0);
@@ -138,7 +198,7 @@ int main(int argc, char** argv){
 
     SDL_Event e;
     bool edit = false;
-    std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> cells;
+    Cells cells;
     Pixel::Coor c;
     uint32_t timeStamp = SDL_GetTicks();
     uint32_t timeWait = 125;
@@ -147,66 +207,12 @@ int main(int argc, char** argv){
     while(1){
         uint32_t frameStart = SDL_GetTicks();
         auto keyStates = SDL_GetKeyboardState(NULL);
-        bool shift = keyStates[SDL_SCANCODE_LSHIFT] || keyStates[SDL_SCANCODE_RSHIFT];
-        while(SDL_PollEvent(&e)){
-            switch (e.type){
-                case SDL_QUIT:
-                    goto end;
-
-                case SDL_KEYDOWN:
-                    switch (e.key.keysym.scancode){
-                        default: break;
-                        
-                        // edit mode
-                        case SDL_SCANCODE_E: edit = !edit; break;
-                        // clear cells during edit mode
-                        case SDL_SCANCODE_C:
-                            if (edit) {
-                               for (auto c : cells)
-                                   map.at(c) = false;
-                               cells.clear();
-                            }
-                            break;
-                        // fast forward
-                        case SDL_SCANCODE_F: 
-                            if (shift) fastForward = 0;
-                            else fastForward++;
-                            break;
-
-                        // move camera
-                        case SDL_SCANCODE_W: map.d_camera.y = -1; break;
-                        case SDL_SCANCODE_S: map.d_camera.y =  1; break;
-                        case SDL_SCANCODE_A: map.d_camera.x = -1; break;
-                        case SDL_SCANCODE_D: map.d_camera.x =  1; break;
-
-                        // back to origin
-                        case SDL_SCANCODE_O:
-                            map.camera = { 0, 0 };
-                            break;
-                        
-                        // edit
-                        case SDL_SCANCODE_SPACE:
-                            if (edit){
-                                SDL_GetMouseState(&c.x, &c.y);
-                                auto actual = map.actual(p->fromScreenCoor(c));
-                                if (shift){
-                                    map.at(actual) = false;
-                                    cells.erase(actual);
-                                }else{
-                                    map.at(actual) = true;
-                                    cells.insert(actual);
-                                }
-                            }
-                            break;
-                    }
-                    break;
-
-                case SDL_KEYUP:
-                    switch (e.key.keysym.scancode){
-                        default: break;
-                        case SDL_SCANCODE_W: case SDL_SCANCODE_S: map.d_camera.y = 0; break;
-                        case SDL_SCANCODE_A: case SDL_SCANCODE_D: map.d_camera.x = 0; break;
-                    }
+        if (edit){
+            SDL_WaitEvent(&e);
+            keyboardCommands(e, map, cells, edit, fastForward, keyStates);
+        }else{
+            while(SDL_PollEvent(&e)){
+                keyboardCommands(e, map, cells, edit, fastForward, keyStates);
             }
         }
         map.camera.y += map.d_camera.y;
@@ -216,8 +222,8 @@ int main(int argc, char** argv){
         auto nextFrameTime = timeStamp + timeWait * pow(2, -fastForward);
         if (!edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
-            std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> nextGenLive;
-            std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> nextGenDie;
+            Cells nextGenLive;
+            Cells nextGenDie;
             auto top = map.top;
             auto bottom = map.bottom;
             for (auto cell : cells){
@@ -248,6 +254,5 @@ int main(int argc, char** argv){
         int timeElapse = 17 - (SDL_GetTicks()-frameStart);
         SDL_Delay(timeElapse > 0 ? timeElapse : 0);
     }
-end:
     return 0;
 }
