@@ -1,7 +1,7 @@
 CC = clang++
 CXX = $(CC)
 FSANFLAG = -fsanitize=address -fsanitize=alignment 
-OPTFLAG = -g -O3
+OPTFLAG = -g -O0
 STDFLAG = -std=c++20
 LDFLAGS = ~/program/pixel/target/*.o `pkg-config sdl2 --libs`
 CFLAGS = $(STDFLAG) $(FSANFLAG) $(OPTFLAG) -pipe -I/Users/austinsiu/Desktop/program/pixel/src/include `pkg-config sdl2 --cflags`
