@@ -82,7 +82,56 @@ struct Map{
 
 };
 
-int main(){
+void parseArg(int argc, char** argv)
+{
+    for (int i = 1; i < argc; i++)
+    {
+        if (argv[i][0] != '-'){
+            std::cout << "Unknown argument: " << argv[i] << std::endl;
+            exit(1);
+        }
+        auto len = strlen(argv[i]);
+        for (int j = 1; j < len; j++){
+            auto option = argv[i][j];
+            switch (option){
+                default:
+                    std::cout << "Unknown option: " << option << std::endl;
+                    exit(1);
+                case 'h':
+#include "helpMsg.hpp"
+                    std::cout << helpMsg << std::endl;
+                    exit(0);
+            }
+        }
+    }
+}
+
+bool checkLiveOrDie(Pixel::Coor c, Map& map){
+        auto neighbours = 0;
+        neighbours += map.at({c.y-1, c.x-1});
+        neighbours += map.at({c.y-1, c.x  });
+        neighbours += map.at({c.y-1, c.x+1});
+        neighbours += map.at({c.y  , c.x-1});
+        neighbours += map.at({c.y  , c.x+1});
+        neighbours += map.at({c.y+1, c.x-1});
+        neighbours += map.at({c.y+1, c.x  });
+        neighbours += map.at({c.y+1, c.x+1});
+        // Any live cell with less than two or more than three live neighbours dies;
+        if (neighbours < 2 || neighbours > 3)
+            return false;
+
+        // Any live cell with two or three live neighbours survives.
+        else if (map.at(c))
+            return true;
+
+        // Any dead cell with three live neighbours becomes a live cell.
+        else if (!map.at(c) && neighbours == 3)
+            return true;
+        return false;
+}
+
+int main(int argc, char** argv){
+    parseArg(argc, argv);
     p = new Pixel(75, 100, 10, "Game of Life", 0);
     auto window = p->getWindow();
     Map map;
@@ -93,11 +142,12 @@ int main(){
     Pixel::Coor c;
     uint32_t timeStamp = SDL_GetTicks();
     uint32_t timeWait = 125;
-    bool fastForward = false;
+    int fastForward = 0;
 
     while(1){
         uint32_t frameStart = SDL_GetTicks();
         auto keyStates = SDL_GetKeyboardState(NULL);
+        bool shift = keyStates[SDL_SCANCODE_LSHIFT] || keyStates[SDL_SCANCODE_RSHIFT];
         while(SDL_PollEvent(&e)){
             switch (e.type){
                 case SDL_QUIT:
@@ -118,7 +168,10 @@ int main(){
                             }
                             break;
                         // fast forward
-                        case SDL_SCANCODE_F: fastForward = true; break;
+                        case SDL_SCANCODE_F: 
+                            if (shift) fastForward = 0;
+                            else fastForward++;
+                            break;
 
                         // move camera
                         case SDL_SCANCODE_W: map.d_camera.y = -1; break;
@@ -136,7 +189,7 @@ int main(){
                             if (edit){
                                 SDL_GetMouseState(&c.x, &c.y);
                                 auto actual = map.actual(p->fromScreenCoor(c));
-                                if (keyStates[SDL_SCANCODE_LSHIFT] || keyStates[SDL_SCANCODE_RSHIFT]){
+                                if (shift){
                                     map.at(actual) = false;
                                     cells.erase(actual);
                                 }else{
@@ -151,7 +204,6 @@ int main(){
                 case SDL_KEYUP:
                     switch (e.key.keysym.scancode){
                         default: break;
-                        case SDL_SCANCODE_F: fastForward = false;
                         case SDL_SCANCODE_W: case SDL_SCANCODE_S: map.d_camera.y = 0; break;
                         case SDL_SCANCODE_A: case SDL_SCANCODE_D: map.d_camera.x = 0; break;
                     }
@@ -161,7 +213,7 @@ int main(){
         map.camera.x += map.d_camera.x;
 
         // rules
-        auto nextFrameTime = timeStamp + timeWait * pow(2, fastForward? -1 : 1);
+        auto nextFrameTime = timeStamp + timeWait * pow(2, -fastForward);
         if (!edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
             std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> nextGenLive;
@@ -169,39 +221,20 @@ int main(){
             auto top = map.top;
             auto bottom = map.bottom;
             for (auto cell : cells){
-                for (int i = cell.y-2; i < cell.y+2; i++){
-                    for (int j = cell.x - 2; j < cell.x+2; j++){
+                auto buf = 2;
+                for (int i = cell.y-buf; i < cell.y+buf; i++){
+                    for (int j = cell.x - buf; j < cell.x+buf; j++){
                         Pixel::Coor c  = {i, j};
-                        auto neighbours = 0;
-                        neighbours += map.at({c.y-1, c.x-1});
-                        neighbours += map.at({c.y-1, c.x  });
-                        neighbours += map.at({c.y-1, c.x+1});
-                        neighbours += map.at({c.y  , c.x-1});
-                        neighbours += map.at({c.y  , c.x+1});
-                        neighbours += map.at({c.y+1, c.x-1});
-                        neighbours += map.at({c.y+1, c.x  });
-                        neighbours += map.at({c.y+1, c.x+1});
-                        // Any live cell with less than two or more than three live neighbours dies;
-                        if (neighbours < 2 || neighbours > 3)
-                            nextGenDie.emplace(c);
-
-                        // Any live cell with two or three live neighbours survives.
-                        else if (map.at(c))
-                            nextGenLive.emplace(c);
-
-                        // Any dead cell with three live neighbours becomes a live cell.
-                        else if (!map.at(c) && neighbours == 3)
-                            nextGenLive.emplace(c);
-
+                        auto isLive = checkLiveOrDie(c, map);
+                        if (isLive) nextGenLive.insert(c);
+                        else nextGenDie.insert(c);
                     }
                 }
             }
             for (auto c : nextGenLive)
                 map.at(c) = true;
-            
             for (auto c : nextGenDie)
                 map.at(c) = false;
-
             cells = nextGenLive;
         }
 
