@@ -206,15 +206,13 @@ int main(int argc, char** argv){
 
     while(1){
         uint32_t frameStart = SDL_GetTicks();
+
+        if (edit) SDL_WaitEvent(&e);
+        else SDL_PollEvent(&e);
+
         auto keyStates = SDL_GetKeyboardState(NULL);
-        if (edit){
-            SDL_WaitEvent(&e);
-            keyboardCommands(e, map, cells, edit, fastForward, keyStates);
-        }else{
-            while(SDL_PollEvent(&e)){
-                keyboardCommands(e, map, cells, edit, fastForward, keyStates);
-            }
-        }
+        keyboardCommands(e, map, cells, edit, fastForward, keyStates);
+
         map.camera.y += map.d_camera.y;
         map.camera.x += map.d_camera.x;
 
@@ -224,8 +222,6 @@ int main(int argc, char** argv){
             timeStamp = SDL_GetTicks();
             Cells nextGenLive;
             Cells nextGenDie;
-            auto top = map.top;
-            auto bottom = map.bottom;
             for (auto cell : cells){
                 auto buf = 2;
                 for (int i = cell.y-buf; i < cell.y+buf; i++){
@@ -237,6 +233,7 @@ int main(int argc, char** argv){
                     }
                 }
             }
+
             for (auto c : nextGenLive)
                 map.at(c) = true;
             for (auto c : nextGenDie)
