@@ -2,7 +2,7 @@ const char* helpmsg =
 "Game of Life, version 0.1\n"
 "\n"
 "In-game commands:\n"
-" wasd:        Camera movement.\n"
+" [shift]wasd: Camera movement.\n"
 " o:           Back to origin.\n"
 " m:           Enlarge pixels.\n"
 " n:           Shrink pixels.\n"

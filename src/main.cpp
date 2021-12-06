@@ -31,7 +31,7 @@ struct Map{
     };
     std::deque<std::deque<Sector>> map;
     int top, bottom;
-    // pair<left, right>
+    // boundaries of each row: pair<left, right>
     std::deque<std::pair<int, int>> boundaries;
 
     Map(){
@@ -84,11 +84,20 @@ struct Map{
 
 };
 
-void parseArg(int argc, char** argv) {
+struct Config {
+    bool edit;
+    int fastForward;
+    bool pause;
+    std::string loadFile;
+    std::string saveFile;
+    Pixel::Color editColor, runningColor, paseColor;
+};
+
+typedef std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> Cells;
+
+void parseArg(int argc, char** argv, Config& config) {
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] != '-'){
-            std::cout << "Unknown argument: " << argv[i] << std::endl;
-            exit(1);
         }
         auto len = strlen(argv[i]);
         for (int j = 1; j < len; j++){
@@ -97,12 +106,70 @@ void parseArg(int argc, char** argv) {
                 default:
                     std::cout << "Unknown option: " << option << std::endl;
                     exit(1);
+
                 case 'h':
                     std::cout << helpmsg << std::endl;
                     exit(0);
+
+                case 'l':
+                case 's':
+                    if (j != len-1){
+                        std::cout << "Expects `" << option << "' as the last option in a option string" << std::endl;
+                        exit(1);
+                    }
+                    i++;
+                    if (i == argc){
+                        std::cout << "Missing file name requested by option `" << option << "'" << std::endl;
+                        exit(1);
+                    }
+                    (option == 'l' ? config.loadFile : config.saveFile) = argv[i];
+                    break;
             }
         }
     }
+}
+
+Cells loadStateFromFile(std::string loadFile){
+    if (loadFile.size() == 0)
+        return {};
+    Cells cells;
+    std::ifstream f (loadFile);
+    if (!f){
+        perror(loadFile.c_str());
+        exit(1);
+    }
+    Pixel::Coor c;
+    while(f >> c.y >> c.x){
+        cells.insert(c);
+    }
+    if (f.bad()){
+        perror(loadFile.c_str());
+        f.close();
+        exit(1);
+    }
+    f.close();
+    std::cout << "Save state loaded from " << loadFile << std::endl;
+    return cells;
+}
+
+void saveStateToFile(std::string saveFile, Cells& cells){
+    if (cells.size() == 0)
+        return;
+    std::ofstream f (saveFile);
+    if (!f){
+        perror(saveFile.c_str());
+        exit(1);
+    }
+    for (auto c : cells){
+        if (!(f << c.y << ' ' << c.x << std::endl)) break;
+    }
+    if (f.bad()){
+        perror(saveFile.c_str());
+        f.close();
+        exit(1);
+    }
+    std::cout << "Save state wrote to " << saveFile << std::endl;
+    f.close();
 }
 
 bool checkLiveOrDie(Pixel::Coor c, Map& map){
@@ -130,35 +197,66 @@ bool checkLiveOrDie(Pixel::Coor c, Map& map){
         return false;
 }
 
-typedef std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> Cells;
+void draw(Cells& cells, Map& map, Pixel::Color color){
+    p->clear();
+    for (auto c : cells){
+        p->set({c.y-map.camera.y, c.x-map.camera.x}, color);
+    }
+    p->render();
+}
 
 #define isPressed(k_) (keyStates[SDL_SCANCODE_##k_])
 
-void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fastForward, const uint8_t* keyStates){
+void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Config& config){
     Pixel::Coor c;
+    if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_P){
+        config.pause = !config.pause;
+        draw(cells, map,
+                config.pause ? config.paseColor :
+                config.edit ? config.editColor :
+                config.runningColor);
+    }
+    // command during pause
+    if (config.pause){
+        switch (e.type){
+            case SDL_KEYDOWN:
+                switch (e.key.keysym.scancode){
+                    default: return;
+
+                    // save
+                    case SDL_SCANCODE_S:
+                        saveStateToFile(config.saveFile, cells);
+                        break;
+                }
+                break;
+        }
+    }
     bool shift = isPressed(LSHIFT) || isPressed(RSHIFT);
     bool space = isPressed(SPACE);
     auto window = p->getWindow();
     int newH, newW, newP;
+    // command during not pause
     switch (e.type){
         case SDL_KEYDOWN:
             switch (e.key.keysym.scancode){
                 default: break;
                 
                 // edit mode
-                case SDL_SCANCODE_E: edit = !edit; break;
-                // clear cells during edit mode
+                case SDL_SCANCODE_E: config.edit = !config.edit; break;
+
+                // clear cells during config.edit mode
                 case SDL_SCANCODE_C:
-                    if (edit) {
+                    if (config.edit) {
                        for (auto c : cells)
                            map.at(c) = false;
                        cells.clear();
                     }
                     break;
+
                 // fast forward
                 case SDL_SCANCODE_F: 
-                    if (shift) fastForward = 0;
-                    else fastForward++;
+                    if (shift) config.fastForward = 0;
+                    else config.fastForward++;
                     break;
 
                 // back to origin
@@ -191,7 +289,7 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fast
     else                   map.d_camera.x =  0;
 
     // edit
-    if (edit && space){
+    if (config.edit && space){
         SDL_GetMouseState(&c.x, &c.y);
         auto actual = map.actual(p->fromScreenCoor(c));
         if (shift){
@@ -205,44 +303,54 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, bool& edit, int& fast
 }
 
 int main(int argc, char** argv){
-    parseArg(argc, argv);
+    Config config = {
+        .edit = true,
+        .fastForward = 0,
+        .pause = false,
+        .loadFile = "",
+        .saveFile = "save.cells",
+        .editColor = 10,
+        .runningColor = 15,
+        .paseColor = 9,
+    };
+    parseArg(argc, argv, config);
     p = new Pixel(75, 100, 10, "Game of Life", 0);
     Map map;
 
     SDL_Event e;
-    bool edit = false;
-    Cells cells;
+    Cells cells = loadStateFromFile(config.loadFile);
+    for (auto c : cells){
+        map.at(c) = true;
+    }
+    draw(cells, map, config.editColor);
     Pixel::Coor c;
     uint32_t timeStamp = SDL_GetTicks();
     uint32_t timeWait = 125;
-    int fastForward = 0;
 
     while(1){
         auto window = p->getWindow();
         uint32_t frameStart = SDL_GetTicks();
 
-        if (edit) SDL_WaitEvent(&e);
-        else SDL_PollEvent(&e);
+        while(config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e)){
+            switch (e.type){
+                case SDL_QUIT:
+                    exit(0);
 
-        switch (e.type){
-            case SDL_QUIT:
-                exit(0);
+                case SDL_WINDOWEVENT:
+                    p->resizeWindow(&e.window, p->getWindow().pixelw);
+                    break;
 
-            case SDL_WINDOWEVENT:
-                p->resizeWindow(&e.window, p->getWindow().pixelw);
-                break;
-
-            default:
-                auto keyStates = SDL_GetKeyboardState(NULL);
-                keyboardCommands(e, map, cells, edit, fastForward, keyStates);
+                default:
+                    auto keyStates = SDL_GetKeyboardState(NULL);
+                    keyboardCommands(e, map, cells, keyStates, config);
+            }
         }
-
         map.camera.y += map.d_camera.y;
         map.camera.x += map.d_camera.x;
 
         // rules
-        auto nextFrameTime = timeStamp + timeWait * pow(2, -fastForward);
-        if (!edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
+        auto nextFrameTime = timeStamp + timeWait * pow(2, -config.fastForward);
+        if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
             Cells nextGenLive;
             Cells nextGenDie;
@@ -265,17 +373,10 @@ int main(int argc, char** argv){
             cells = nextGenLive;
         }
 
-        // TODO: add lazy rendering when density too high
-        p->clear();
-        // for (int i = 0; i < window.h; i++){
-        //     for (int j = 0; j < window.w;  j++){
-        //         p->set({i, j}, map.at({map.camera.y + i, map.camera.x + j}) ? edit ? 10 : 15 : 0);
-        //     }
-        // }
-        for (auto c : cells){
-            p->set({c.y-map.camera.y, c.x-map.camera.x}, edit ? 10 : 15);
+        if (!(config.edit && !map.d_camera.y && !map.d_camera.x)){
+            Pixel::Color color = config.edit? config.editColor : config.runningColor;
+            draw(cells, map, color);
         }
-        p->render();
         int timeElapse = 17 - (SDL_GetTicks()-frameStart);
         SDL_Delay(timeElapse > 0 ? timeElapse : 0);
     }
