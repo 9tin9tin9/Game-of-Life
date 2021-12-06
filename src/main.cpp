@@ -26,7 +26,7 @@ struct Map{
             plane = std::vector<std::vector<bool>>(sectorWidth, std::vector<bool>(sectorWidth, false));
         }
         std::vector<bool>::reference at(Pixel::Coor c){
-            return plane.at(c.y).at(c.x);
+            return plane[c.y][c.x];
         }
     };
     std::deque<std::deque<Sector>> map;
@@ -46,7 +46,7 @@ struct Map{
     }
 
     // allocate if necessary
-    std::pair<Pixel::Coor, Pixel::Coor> _at(Pixel::Coor c){
+    std::pair<Pixel::Coor, Pixel::Coor> _at(const Pixel::Coor c){
         // allocate
         int my = floor((float)c.y/sectorWidth);
         int mx = floor((float)c.x/sectorWidth);
@@ -61,24 +61,25 @@ struct Map{
             bottom++;
         }
         auto& b = boundaries.at(my-top);
+        auto a = my-top;
         while(mx < b.first){
-            map.at(my-top).push_front(Sector());
+            map.at(a).push_front(Sector());
             b.first--;
         }
         while(mx >= b.second){
-            map.at(my-top).push_back(Sector());
+            map.at(a).push_back(Sector());
             b.second++;
         }
         // calculate which sector and relative coordinates
-        Pixel::Coor sector = { my - top, mx - b.first };
+        Pixel::Coor sector = { a, mx - b.first };
         Pixel::Coor relative = { c.y - my*sectorWidth, c.x - mx*sectorWidth };
         
         return {sector, relative};
     }
 
-    std::vector<bool>::reference at(Pixel::Coor c) {
+    std::vector<bool>::reference at(const Pixel::Coor c) {
         auto offset = _at(c);
-        return map.at(offset.first.y).at(offset.first.x).at(offset.second);
+        return map[offset.first.y][offset.first.x].at(offset.second);
     }
 
 };
@@ -114,16 +115,17 @@ bool checkLiveOrDie(Pixel::Coor c, Map& map){
         neighbours += map.at({c.y+1, c.x-1});
         neighbours += map.at({c.y+1, c.x  });
         neighbours += map.at({c.y+1, c.x+1});
+        auto isLive = map.at(c);
         // Any live cell with less than two or more than three live neighbours dies;
         if (neighbours < 2 || neighbours > 3)
             return false;
 
         // Any live cell with two or three live neighbours survives.
-        else if (map.at(c))
+        else if (isLive)
             return true;
 
         // Any dead cell with three live neighbours becomes a live cell.
-        else if (!map.at(c) && neighbours == 3)
+        else if (!isLive && neighbours == 3)
             return true;
         return false;
 }
@@ -263,11 +265,15 @@ int main(int argc, char** argv){
             cells = nextGenLive;
         }
 
+        // TODO: add lazy rendering when density too high
         p->clear();
-        for (int i = 0; i < window.h; i++){
-            for (int j = 0; j < window.w;  j++){
-                p->set({i, j}, map.at({map.camera.y + i, map.camera.x + j}) ? edit ? 10 : 15 : 0);
-            }
+        // for (int i = 0; i < window.h; i++){
+        //     for (int j = 0; j < window.w;  j++){
+        //         p->set({i, j}, map.at({map.camera.y + i, map.camera.x + j}) ? edit ? 10 : 15 : 0);
+        //     }
+        // }
+        for (auto c : cells){
+            p->set({c.y-map.camera.y, c.x-map.camera.x}, edit ? 10 : 15);
         }
         p->render();
         int timeElapse = 17 - (SDL_GetTicks()-frameStart);
