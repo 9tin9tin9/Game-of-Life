@@ -16,7 +16,7 @@ void addCellsToMap(std::vector<std::vector<bool>>& map, std::vector<Pixel::Coor>
 
 // Infinite grid
 struct Map{
-    // actual coordinate of top left pixel
+    // Actual coordinate of top left pixel
     Pixel::Coor camera = {0, 0};
     Pixel::Coor d_camera = {0, 0};
 
@@ -31,7 +31,7 @@ struct Map{
     };
     std::deque<std::deque<Sector>> map;
     int top, bottom;
-    // boundaries of each row: pair<left, right>
+    // Boundaries of each row: pair<left, right>
     std::deque<std::pair<int, int>> boundaries;
 
     Map(){
@@ -45,9 +45,9 @@ struct Map{
         return {camera.y + onScreen.y, camera.x + onScreen.x};
     }
 
-    // allocate if necessary
+    // Allocate if necessary
     std::pair<Pixel::Coor, Pixel::Coor> _at(const Pixel::Coor c){
-        // allocate
+        // Allocate
         int my = floor((float)c.y/sectorWidth);
         int mx = floor((float)c.x/sectorWidth);
         while(my < top){
@@ -70,7 +70,7 @@ struct Map{
             map.at(a).push_back(Sector());
             b.second++;
         }
-        // calculate which sector and relative coordinates
+        // Calculate which sector and relative coordinates
         Pixel::Coor sector = { a, mx - b.first };
         Pixel::Coor relative = { c.y - my*sectorWidth, c.x - mx*sectorWidth };
         
@@ -216,14 +216,14 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
                 config.edit ? config.editColor :
                 config.runningColor);
     }
-    // command during pause
+    // Command during pause
     if (config.pause){
         switch (e.type){
             case SDL_KEYDOWN:
                 switch (e.key.keysym.scancode){
                     default: return;
 
-                    // save
+                    // Save
                     case SDL_SCANCODE_S:
                         saveStateToFile(config.saveFile, cells);
                         break;
@@ -235,16 +235,16 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
     bool space = isPressed(SPACE);
     auto window = p->getWindow();
     int newH, newW, newP;
-    // command during not pause
+    // Command during not pause
     switch (e.type){
         case SDL_KEYDOWN:
             switch (e.key.keysym.scancode){
                 default: break;
                 
-                // edit mode
+                // Edit mode
                 case SDL_SCANCODE_E: config.edit = !config.edit; break;
 
-                // clear cells during config.edit mode
+                // Clear cells during config.edit mode
                 case SDL_SCANCODE_C:
                     if (config.edit) {
                        for (auto c : cells)
@@ -253,18 +253,18 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
                     }
                     break;
 
-                // fast forward
+                // Fast forward
                 case SDL_SCANCODE_F: 
                     if (shift) config.fastForward = 0;
                     else config.fastForward++;
                     break;
 
-                // back to origin
+                // Back to origin
                 case SDL_SCANCODE_O:
                     map.camera = { 0, 0 };
                     break;
 
-                // enlarge and shrink pixels
+                // Enlarge and shrink pixels
                 case SDL_SCANCODE_M:
                 case SDL_SCANCODE_N:
                     newP = e.key.keysym.scancode == SDL_SCANCODE_M ?
@@ -280,7 +280,7 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
             break;
     }
 
-    // move camera
+    // Move camera
     if (isPressed(W))      map.d_camera.y = -(1+shift*2);
     else if (isPressed(S)) map.d_camera.y =  1+shift*2;
     else                   map.d_camera.y =  0;
@@ -288,7 +288,7 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
     else if (isPressed(D)) map.d_camera.x =  1+shift*2;
     else                   map.d_camera.x =  0;
 
-    // edit
+    // Edit
     if (config.edit && space){
         SDL_GetMouseState(&c.x, &c.y);
         auto actual = map.actual(p->fromScreenCoor(c));
@@ -331,6 +331,7 @@ int main(int argc, char** argv){
         auto window = p->getWindow();
         uint32_t frameStart = SDL_GetTicks();
 
+        // Events
         while(config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e)){
             switch (e.type){
                 case SDL_QUIT:
@@ -345,10 +346,12 @@ int main(int argc, char** argv){
                     keyboardCommands(e, map, cells, keyStates, config);
             }
         }
+
+        // Update camera
         map.camera.y += map.d_camera.y;
         map.camera.x += map.d_camera.x;
 
-        // rules
+        // Rules
         auto nextFrameTime = timeStamp + timeWait * pow(2, -config.fastForward);
         if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
@@ -373,10 +376,12 @@ int main(int argc, char** argv){
             cells = nextGenLive;
         }
 
+        // Do not render when in editing mode and idle
         if (!(config.edit && !map.d_camera.y && !map.d_camera.x)){
             Pixel::Color color = config.edit? config.editColor : config.runningColor;
             draw(cells, map, color);
         }
+        // Limit frame rate to 60 fps
         int timeElapse = 17 - (SDL_GetTicks()-frameStart);
         SDL_Delay(timeElapse > 0 ? timeElapse : 0);
     }
