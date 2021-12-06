@@ -7,13 +7,6 @@
 Pixel* p;
 const int sectorWidth = 30;
 
-void addCellsToMap(std::vector<std::vector<bool>>& map, std::vector<Pixel::Coor> cells)
-{
-    for (auto c : cells){
-        map[c.y][c.x] = true;
-    }
-}
-
 // Infinite grid
 struct Map{
     // Actual coordinate of top left pixel
@@ -107,10 +100,12 @@ void parseArg(int argc, char** argv, Config& config) {
                     std::cout << "Unknown option: " << option << std::endl;
                     exit(1);
 
+                // Print help msg
                 case 'h':
                     std::cout << helpmsg << std::endl;
                     exit(0);
 
+                // Load/Save
                 case 'l':
                 case 's':
                     if (j != len-1){
