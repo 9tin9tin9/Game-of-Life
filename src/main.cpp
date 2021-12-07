@@ -7,6 +7,19 @@
 Pixel* p;
 const int sectorWidth = 30;
 
+struct Config {
+    bool edit;
+    int fastForward;
+    bool pause;
+    std::string loadFile;
+    std::string saveFile;
+    Pixel::Color editColor, runningColor, paseColor;
+    int density;
+    const int fac() {
+        return density+1;
+    }
+};
+
 // Infinite grid
 struct Map{
     // Actual coordinate of top left pixel
@@ -34,8 +47,10 @@ struct Map{
         boundaries = { {0, 1} };
     }
 
-    Pixel::Coor actual(Pixel::Coor onScreen){
-        return {camera.y + onScreen.y, camera.x + onScreen.x};
+    Pixel::Coor actual(Pixel::Coor onScreen, Config config){
+        return {
+            camera.y+onScreen.y*config.fac(),
+            camera.x+onScreen.x*config.fac()};
     }
 
     // Allocate if necessary
@@ -75,15 +90,6 @@ struct Map{
         return map[offset.first.y][offset.first.x].at(offset.second);
     }
 
-};
-
-struct Config {
-    bool edit;
-    int fastForward;
-    bool pause;
-    std::string loadFile;
-    std::string saveFile;
-    Pixel::Color editColor, runningColor, paseColor;
 };
 
 typedef std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> Cells;
@@ -192,10 +198,14 @@ bool checkLiveOrDie(Pixel::Coor c, Map& map){
         return false;
 }
 
-void draw(Cells& cells, Map& map, Pixel::Color color){
+void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
     p->clear();
+    auto win = p->getWindow();
     for (auto c : cells){
-        p->set({c.y-map.camera.y, c.x-map.camera.x}, color);
+        p->set(
+            {(c.y-map.camera.y)/config.fac(),
+            (c.x-map.camera.x)/config.fac()},
+            color);
     }
     p->render();
 }
@@ -207,9 +217,10 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
     if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_P){
         config.pause = !config.pause;
         draw(cells, map,
-                config.pause ? config.paseColor :
-                config.edit ? config.editColor :
-                config.runningColor);
+            (config.pause ? config.paseColor :
+            config.edit ? config.editColor :
+            config.runningColor),
+            config);
     }
     // Command during pause
     if (config.pause){
@@ -263,11 +274,21 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
                 // Enlarge and shrink pixels
                 case SDL_SCANCODE_M:
                 case SDL_SCANCODE_N:
-                    newP = e.key.keysym.scancode == SDL_SCANCODE_M ?
-                                window.pixelw+1 :
-                                window.pixelw == 1 ?
-                                    1 :
-                                    window.pixelw-1;
+                    if (e.key.keysym.scancode == SDL_SCANCODE_M){
+                        if (config.density > 0){
+                            config.density--;
+                            newP = 1;
+                        }else{
+                            newP = window.pixelw+1;
+                        }
+                    }else{
+                        if (window.pixelw == 1){
+                            config.density++;
+                            newP = 1;
+                        }else{
+                            newP = window.pixelw-1;
+                        }
+                    }
                     newH = floor((float)window.h*window.pixelw/newP);
                     newW = floor((float)window.w*window.pixelw/newP);
                     p->resizeWindow(newH, newW, newP);
@@ -287,7 +308,7 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
     // Edit
     if (config.edit && space){
         SDL_GetMouseState(&c.x, &c.y);
-        auto actual = map.actual(p->fromScreenCoor(c));
+        auto actual = map.actual(p->fromScreenCoor(c), config);
         if (shift){
             map.at(actual) = false;
             cells.erase(actual);
@@ -308,6 +329,7 @@ int main(int argc, char** argv){
         .editColor = 10,
         .runningColor = 15,
         .paseColor = 9,
+        .density = 0,
     };
     parseArg(argc, argv, config);
     p = new Pixel(75, 100, 10, "Game of Life", 0);
@@ -318,7 +340,7 @@ int main(int argc, char** argv){
     for (auto c : cells){
         map.at(c) = true;
     }
-    draw(cells, map, config.editColor);
+    draw(cells, map, config.editColor, config);
     Pixel::Coor c;
     uint32_t timeStamp = SDL_GetTicks();
     uint32_t timeWait = 125;
@@ -373,7 +395,7 @@ int main(int argc, char** argv){
         }
 
         Pixel::Color color = config.edit? config.editColor : config.runningColor;
-        draw(cells, map, color);
+        draw(cells, map, color, config);
         // Limit frame rate to 60 fps
         int timeElapse = 17 - (SDL_GetTicks()-frameStart);
         SDL_Delay(timeElapse > 0 ? timeElapse : 0);
