@@ -216,7 +216,7 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
         switch (e.type){
             case SDL_KEYDOWN:
                 switch (e.key.keysym.scancode){
-                    default: return;
+                    default: break;
 
                     // Save
                     case SDL_SCANCODE_S:
@@ -225,6 +225,7 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
                 }
                 break;
         }
+        return;
     }
     bool shift = isPressed(LSHIFT) || isPressed(RSHIFT);
     bool space = isPressed(SPACE);
@@ -371,11 +372,8 @@ int main(int argc, char** argv){
             cells = nextGenLive;
         }
 
-        // Do not render when in editing mode and idle
-        if (!(config.edit && !map.d_camera.y && !map.d_camera.x)){
-            Pixel::Color color = config.edit? config.editColor : config.runningColor;
-            draw(cells, map, color);
-        }
+        Pixel::Color color = config.edit? config.editColor : config.runningColor;
+        draw(cells, map, color);
         // Limit frame rate to 60 fps
         int timeElapse = 17 - (SDL_GetTicks()-frameStart);
         SDL_Delay(timeElapse > 0 ? timeElapse : 0);
