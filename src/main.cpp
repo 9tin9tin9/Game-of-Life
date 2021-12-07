@@ -326,7 +326,7 @@ int main(int argc, char** argv){
         auto window = p->getWindow();
         uint32_t frameStart = SDL_GetTicks();
 
-        // Events
+        // Event loop
         while(config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e)){
             switch (e.type){
                 case SDL_QUIT:
