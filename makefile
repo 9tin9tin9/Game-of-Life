@@ -1,15 +1,10 @@
-CC = clang++
-CXX = $(CC)
-FSANFLAG = # -fsanitize=address -fsanitize=alignment 
-OPTFLAG = -g -O3
-STDFLAG = -std=c++20
+CXX = clang++
+OPTFLAG = -O3
+STDFLAG = -std=c++17
 LDFLAGS = `pkg-config sdl2 --libs`
-CFLAGS = $(STDFLAG) $(FSANFLAG) $(OPTFLAG) -pipe `pkg-config sdl2 --cflags`
-CPPFLAGS = $(CFLAGS)
+CPPFLAGS = $(STDFLAG) $(OPTFLAG) -pipe `pkg-config sdl2 --cflags`
 FILE_NAMES = pixel
-FILE_TYPE = cpp
 
-SRCDIR = src
 OBJDIR = target
 OBJ = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(FILE_NAMES)))
 
@@ -19,16 +14,15 @@ build:
 	@rm -rf $(OBJDIR)/release/*
 	@make src/main
 	@mv src/main $(OBJDIR)/release
-	@mv src/main.dSYM $(OBJDIR)/release
-	@if [[ ! -e gameOfLife ]]; then ln -s $(OBJDIR)/release/main gameOfLife; echo linked gameOfLife -\> $(OBJDIR)/release/main; fi
+	@if [[ ! -e gameOfLife ]]; then ln -s $(OBJDIR)/release/main gameOfLife; echo created symlink gameOfLife -\> $(OBJDIR)/release/main; fi
 
 run:
-	@./target/release/main
+	@./$(OBJDIR)/release/main
 
 src/main: $(OBJ)
 
-$(OBJ): $(OBJDIR)/%.o: $(SRCDIR)/%.$(FILE_TYPE) makefile
-	$(CC) -c $(CFLAGS) $< -o $@
+$(OBJ): $(OBJDIR)/%.o: src/%.cpp makefile
+	$(CXX) -c $(CPPFLAGS) $< -o $@
 
 .PHONY: clean
 
