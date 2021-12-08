@@ -11,6 +11,7 @@ const char* helpmsg =
 " o:           Back to origin.\n"
 " m:           Enlarge pixels.\n"
 " n:           Shrink pixels.\n"
+" g:           Toogle grid lines.\n"
 " p:           Pause.\n"
 "\n"
 " Running(white):\n"

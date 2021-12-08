@@ -15,6 +15,7 @@ struct Config {
     std::string saveFile;
     Pixel::Color editColor, runningColor, paseColor;
     int density;
+    bool grid;
 };
 
 // Infinite grid
@@ -204,8 +205,9 @@ void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
             (c.x-map.camera.x)/config.density},
             color);
     }
-    // white grid lines
-    p->render(config.edit && win.pixelw >= 10, 7);
+    // black -> white grid lines
+    auto gridLineColor = 232+win.pixelw > 255 ? 255 : 232+win.pixelw;
+    p->render(config.grid && win.pixelw >= 10, gridLineColor);
 }
 
 #define isPressed(k_) (keyStates[SDL_SCANCODE_##k_])
@@ -240,6 +242,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     bool space = isPressed(SPACE);
     auto window = p->getWindow();
     int newH, newW, newP;
+    std::pair<int, int> oldSize;
     // Command during not pause
     switch (e.type){
         case SDL_KEYDOWN:
@@ -288,12 +291,17 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                             newP = window.pixelw-1;
                         }
                     }
-                    auto oldSize = p->getWindowSize();
+                    oldSize = p->getWindowSize();
                     newH = floor((float)oldSize.first/newP);
                     newW = floor((float)oldSize.second/newP);
                     p->resizeWindow(newH, newW, newP);
                     // set window size again to keep original size
                     p->setWindowSize(oldSize.first, oldSize.second);
+                    break;
+
+                // Toggle grid lines
+                case SDL_SCANCODE_G:
+                    config.grid = !config.grid;
                     break;
             }
             break;
@@ -334,9 +342,10 @@ int main(int argc, char** argv){
         .runningColor = 15,
         .paseColor = 9,
         .density = 1,
+        .grid = true,
     };
     parseArg(argc, argv, config);
-    p = new Pixel(75, 100, 10, "Game of Life", 0);
+    p = new Pixel(75, 100, 15, "Game of Life", 0);
     Map map;
 
     SDL_Event e;
