@@ -128,6 +128,9 @@ void parseArg(int argc, char** argv, Config& config) {
     }
 }
 
+// State file format:
+//      text file, 1 line = 1 cell coordinates
+//      y coordinate and then x coordinate, separated by space
 Cells loadStateFromFile(std::string loadFile){
     if (loadFile.size() == 0)
         return {};
@@ -263,8 +266,10 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
 
                 // Fast forward
                 case SDL_SCANCODE_F: 
-                    if (shift) config.fastForward = 0;
-                    else config.fastForward++;
+                    if (!config.edit){
+                        if (shift) config.fastForward = 0;
+                        else config.fastForward++;
+                    }
                     break;
 
                 // Back to origin
