@@ -1,7 +1,7 @@
 #include <iostream>
-#include "pixel.hpp"
 #include <deque>
 #include <unordered_set>
+#include "pixel.hpp"
 #include "helpmsg.hpp"
 
 Pixel* p;
@@ -15,9 +15,6 @@ struct Config {
     std::string saveFile;
     Pixel::Color editColor, runningColor, paseColor;
     int density;
-    const int fac() {
-        return density+1;
-    }
 };
 
 // Infinite grid
@@ -49,8 +46,8 @@ struct Map{
 
     Pixel::Coor actual(Pixel::Coor onScreen, Config config){
         return {
-            camera.y+onScreen.y*config.fac(),
-            camera.x+onScreen.x*config.fac()};
+            camera.y+onScreen.y*config.density,
+            camera.x+onScreen.x*config.density};
     }
 
     // Allocate if necessary
@@ -203,16 +200,17 @@ void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
     auto win = p->getWindow();
     for (auto c : cells){
         p->set(
-            {(c.y-map.camera.y)/config.fac(),
-            (c.x-map.camera.x)/config.fac()},
+            {(c.y-map.camera.y)/config.density,
+            (c.x-map.camera.x)/config.density},
             color);
     }
-    p->render();
+    // white grid lines
+    p->render(config.edit && win.pixelw >= 10, 7);
 }
 
 #define isPressed(k_) (keyStates[SDL_SCANCODE_##k_])
 
-void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Config& config){
+void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Config& config){
     Pixel::Coor c;
     if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_P){
         config.pause = !config.pause;
@@ -275,7 +273,8 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
                 case SDL_SCANCODE_M:
                 case SDL_SCANCODE_N:
                     if (e.key.keysym.scancode == SDL_SCANCODE_M){
-                        if (config.density > 0){
+                        // furhter shrinken pixels after pixelw = 1
+                        if (config.density > 1){
                             config.density--;
                             newP = 1;
                         }else{
@@ -289,20 +288,25 @@ void keyboardCommands(SDL_Event e, Map& map, Cells& cells, const uint8_t* keySta
                             newP = window.pixelw-1;
                         }
                     }
-                    newH = floor((float)window.h*window.pixelw/newP);
-                    newW = floor((float)window.w*window.pixelw/newP);
+                    auto oldSize = p->getWindowSize();
+                    newH = floor((float)oldSize.first/newP);
+                    newW = floor((float)oldSize.second/newP);
                     p->resizeWindow(newH, newW, newP);
+                    // set window size again to keep original size
+                    p->setWindowSize(oldSize.first, oldSize.second);
                     break;
             }
             break;
     }
 
     // Move camera
-    if (isPressed(W))      map.d_camera.y = -(1+shift*2);
-    else if (isPressed(S)) map.d_camera.y =  1+shift*2;
+    auto factor = pow(2, config.density-1)*
+                  (6 - (window.pixelw > 5 ? 5 : window.pixelw));
+    if (isPressed(W))      map.d_camera.y = -(1+shift*2)*factor;
+    else if (isPressed(S)) map.d_camera.y =  (1+shift*2)*factor;
     else                   map.d_camera.y =  0;
-    if (isPressed(A))      map.d_camera.x = -(1+shift*2);
-    else if (isPressed(D)) map.d_camera.x =  1+shift*2;
+    if (isPressed(A))      map.d_camera.x = -(1+shift*2)*factor;
+    else if (isPressed(D)) map.d_camera.x =  (1+shift*2)*factor;
     else                   map.d_camera.x =  0;
 
     // Edit
@@ -329,7 +333,7 @@ int main(int argc, char** argv){
         .editColor = 10,
         .runningColor = 15,
         .paseColor = 9,
-        .density = 0,
+        .density = 1,
     };
     parseArg(argc, argv, config);
     p = new Pixel(75, 100, 10, "Game of Life", 0);
@@ -361,7 +365,7 @@ int main(int argc, char** argv){
 
                 default:
                     auto keyStates = SDL_GetKeyboardState(NULL);
-                    keyboardCommands(e, map, cells, keyStates, config);
+                    controls(e, map, cells, keyStates, config);
             }
         }
 

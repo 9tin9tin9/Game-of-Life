@@ -75,8 +75,8 @@ void Pixel::drawPixel(Coor c, int h, int w, Color color)
         return;
     if (h == -1) h = window.h;
     if (w == -1) w = window.w;
-    if (c.x + w >= window.w) w = window.w - c.x - 1;
-    if (c.y + h >= window.h) h = window.h - c.y - 1;
+    if (c.x + w >= window.w) w = window.w - c.x;
+    if (c.y + h >= window.h) h = window.h - c.y;
     if (color == transpaerent) return;
     RGB rgb = palate[color];
     uint32_t clr = *(uint32_t*)&rgb;
@@ -85,12 +85,7 @@ void Pixel::drawPixel(Coor c, int h, int w, Color color)
     size_t pww = window.pixelw*window.w;
     size_t mw = w*window.pixelw;
     for (int i = 0; i < h*window.pixelw; i++){
-        // size_t baseIndex = (c.y*window.pw + i)*window.pw*window.w + c.x*window.pw;
         size_t baseIndex = (my + i)*pww + mx;
-        // std::fill(
-        //     &sdl.pixels[baseIndex], 
-        //     &sdl.pixels[baseIndex + mw], 
-        //     clr);
         std::fill(&buffer[baseIndex], &buffer[baseIndex + mw], clr);
     }
 }
@@ -141,6 +136,11 @@ Pixel::Pixel(
     if (!sdl.texture)
         throw Error("Couldn't create SDL texture: "s + SDL_GetError());
 
+    sdl.rect = (SDL_Rect){
+                .x = 0, .y = 0,
+                .w = screenWidth, .h = screenHeight,
+                };
+
     initPalate(palate);
     buffer = std::vector<uint32_t>(h*w*pixelWidth*pixelWidth, 0);
 
@@ -153,7 +153,7 @@ Pixel::Pixel(
     SDL_RenderClear(sdl.renderer);
 
     drawPixel({0, 0}, -1, -1, base);
-    render();
+    render(false, 0);
 }
 
 Pixel::~Pixel()
@@ -171,7 +171,9 @@ void Pixel::resizeWindow(int h, int w, int pixelw)
 {
     if (h < 1 || w < 1 || pixelw < 1)
         return;
-    std::vector<uint32_t> newBuffer (h*pixelw*w*pixelw, 0);
+    const auto newScreenHeight = h*pixelw;
+    const auto newScreenWidth = w*pixelw;
+    std::vector<uint32_t> newBuffer (newScreenHeight*newScreenWidth, 0);
     for (int i = 0; i < window.h; i++){
         for (int j = 0; j < window.w; j++){
             try{
@@ -179,7 +181,7 @@ void Pixel::resizeWindow(int h, int w, int pixelw)
                 for (int k = 0; k < pixelw; k++)
                     for (int l = 0; l < pixelw; l++)
                         try {
-                        newBuffer.at((i+k)*w*pixelw + (j+l)*pixelw) = p;
+                        newBuffer.at((i+k)*newScreenWidth + (j+l)*pixelw) = p;
                         } catch (...) {
                             continue;
                         }
@@ -192,14 +194,16 @@ void Pixel::resizeWindow(int h, int w, int pixelw)
     window.h = h;
     window.w = w;
     window.pixelw = pixelw;
-    SDL_SetWindowSize(sdl.window, w*pixelw, h*pixelw);
+    SDL_SetWindowSize(sdl.window, newScreenWidth, newScreenHeight);
     SDL_DestroyTexture(sdl.texture);
     sdl.texture = SDL_CreateTexture(
             sdl.renderer,
             SDL_PIXELFORMAT_ABGR8888,
             SDL_TEXTUREACCESS_STREAMING,
-            w*pixelw,
-            h*pixelw);
+            newScreenWidth,
+            newScreenHeight);
+    sdl.rect.h = newScreenHeight;
+    sdl.rect.w = newScreenWidth;
 }
 
 void Pixel::resizeWindow(SDL_WindowEvent* e, int pixelw)
@@ -208,14 +212,26 @@ void Pixel::resizeWindow(SDL_WindowEvent* e, int pixelw)
         return;
     if (pixelw < 1)
         return;
-    int w = ceil((float)e->data1 / pixelw);
-    int h = ceil((float)e->data2 / pixelw);
+    int w = floor((float)e->data1 / pixelw);
+    int h = floor((float)e->data2 / pixelw);
     resizeWindow(h, w, pixelw);
+}
+
+void Pixel::setWindowSize(int h, int w)
+{
+    SDL_SetWindowSize(sdl.window, w, h);
+}
+
+std::pair<int, int> Pixel::getWindowSize()
+{
+    int h, w;
+    SDL_GetWindowSize(sdl.window, &w, &h);
+    return {h, w};
 }
 
 Pixel::Coor Pixel::fromScreenCoor(Coor c)
 {
-    return {c.y/window.pixelw, c.x/window.pixelw};
+    return {(int)(c.y+0.5)/window.pixelw, (int)(c.x-0.5)/window.pixelw};
 }
 
 void Pixel::set(Coor c, Color color)
@@ -237,11 +253,31 @@ void Pixel::refresh()
     SDL_RenderPresent(sdl.renderer);
 }
 
-void Pixel::render()
+void Pixel::render(bool gridlines, Color color)
 {
     uint32_t* pixels;
     int pitch;
-    SDL_LockTexture(sdl.texture, NULL, (void**)&pixels, &pitch);
+    SDL_LockTexture(sdl.texture, &sdl.rect, (void**)&pixels, &pitch);
+
+    // grid lines
+    if (gridlines)
+    {
+        const auto rgb = *(uint32_t*)&palate[color];
+        const auto mh = window.h*window.pixelw;
+        const auto mw = window.w*window.pixelw;
+        // horizontal lines
+        for (int i = 0; i < window.h; i++)
+        {
+            auto start = buffer.begin() + i * window.pixelw * mw;
+            std::fill(start, start + mw, rgb);
+        }
+        // vertical lines
+        for (int i = 0; i < mh; i++)
+            for (int j = 0; j < window.w; j++)
+                buffer[i * mw + j*window.pixelw] = rgb;
+            
+    }
+
     std::copy(buffer.begin(), buffer.end(), pixels);
     SDL_UnlockTexture(sdl.texture);
     refresh();

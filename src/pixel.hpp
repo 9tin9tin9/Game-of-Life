@@ -47,6 +47,7 @@ class Pixel {
         SDL_Window* window;
         SDL_Renderer* renderer;
         SDL_Texture* texture;
+        SDL_Rect rect;
     }sdl;
 
     std::vector<RGB> palate;
@@ -66,13 +67,17 @@ class Pixel {
     void resizeWindow(int h, int w, int pixelWidth);
     // resize window by event
     void resizeWindow(SDL_WindowEvent* e, int pixelWidth);
+    // actual window size, pass to SDL_SetWindowSize()
+    void setWindowSize(int h, int w);
+    // pair<height, width>
+    std::pair<int, int> getWindowSize();
     Coor fromScreenCoor(Coor c);
 
     void set(Coor c, Color color);
     void clear();
 
     void refresh();
-    void render();
+    void render(bool gridlines, Color color);
 };
 
 #endif

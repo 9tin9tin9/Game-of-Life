@@ -20,7 +20,7 @@ build:
 	@make src/main
 	@mv src/main $(OBJDIR)/release
 	@mv src/main.dSYM $(OBJDIR)/release
-	@if [[ ! -e gameOfLife ]]; then ln -s ./target/release/main gameOfLife; echo created \'gameOfLife\' symlink; fi
+	@if [[ ! -e gameOfLife ]]; then ln -s $(OBJDIR)/release/main gameOfLife; echo linked gameOfLife -\> $(OBJDIR)/release/main; fi
 
 run:
 	@./target/release/main
