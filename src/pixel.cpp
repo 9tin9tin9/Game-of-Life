@@ -231,7 +231,7 @@ std::pair<int, int> Pixel::getWindowSize()
 
 Pixel::Coor Pixel::fromScreenCoor(Coor c)
 {
-    return {(int)(c.y+0.5)/window.pixelw, (int)(c.x-0.5)/window.pixelw};
+    return {(int)(c.y+0.5)/window.pixelw, (int)(c.x)/window.pixelw};
 }
 
 void Pixel::set(Coor c, Color color)

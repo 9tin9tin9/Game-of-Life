@@ -209,7 +209,7 @@ void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
             color);
     }
     // black -> white grid lines
-    auto gridLineColor = 231+win.pixelw > 255 ? 255 : 231+win.pixelw;
+    auto gridLineColor = 227+win.pixelw > 245 ? 245 : 227+win.pixelw;
     p->render(config.grid && win.pixelw > 5, gridLineColor);
 }
 
