@@ -206,8 +206,8 @@ void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
             color);
     }
     // black -> white grid lines
-    auto gridLineColor = 232+win.pixelw > 255 ? 255 : 232+win.pixelw;
-    p->render(config.grid && win.pixelw >= 10, gridLineColor);
+    auto gridLineColor = 231+win.pixelw > 255 ? 255 : 231+win.pixelw;
+    p->render(config.grid && win.pixelw > 5, gridLineColor);
 }
 
 #define isPressed(k_) (keyStates[SDL_SCANCODE_##k_])
