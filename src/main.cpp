@@ -13,7 +13,7 @@ struct Config {
     bool pause;
     std::string loadFile;
     std::string saveFile;
-    Pixel::Color editColor, runningColor, paseColor;
+    Pixel::Color editColor, runningColor, pauseColor;
     int density;
     bool grid;
 };
@@ -95,6 +95,8 @@ typedef std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> Cells;
 void parseArg(int argc, char** argv, Config& config) {
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] != '-'){
+            std::cout << "Invalid argument: " << argv[i] << std::endl;
+            exit(1);
         }
         auto len = strlen(argv[i]);
         for (int j = 1; j < len; j++){
@@ -196,6 +198,8 @@ bool checkLiveOrDie(Pixel::Coor c, Map& map){
         // Any dead cell with three live neighbours becomes a live cell.
         else if (!isLive && neighbours == 3)
             return true;
+        
+        // Dead cells remains dead.
         return false;
 }
 
@@ -208,7 +212,7 @@ void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
             (c.x-map.camera.x)/config.density},
             color);
     }
-    // black -> white grid lines
+    // Color intensity of grid line depends on pixelw
     auto gridLineColor = 227+win.pixelw > 245 ? 245 : 227+win.pixelw;
     p->render(config.grid && win.pixelw > 5, gridLineColor);
 }
@@ -220,7 +224,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_P){
         config.pause = !config.pause;
         draw(cells, map,
-            (config.pause ? config.paseColor :
+            (config.pause ? config.pauseColor :
             config.edit ? config.editColor :
             config.runningColor),
             config);
@@ -255,7 +259,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                 // Edit mode
                 case SDL_SCANCODE_E: config.edit = !config.edit; break;
 
-                // Clear cells during config.edit mode
+                // Clear cells during editing mode
                 case SDL_SCANCODE_C:
                     if (config.edit) {
                        for (auto c : cells)
@@ -281,7 +285,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                 case SDL_SCANCODE_M:
                 case SDL_SCANCODE_N:
                     if (e.key.keysym.scancode == SDL_SCANCODE_M){
-                        // furhter shrinken pixels after pixelw = 1
+                        // further shrinken pixels after pixelw = 1
                         if (config.density > 1){
                             config.density--;
                             newP = 1;
@@ -313,12 +317,11 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     }
 
     // Move camera
-    auto factor = pow(2, config.density-1)*
-                  (6 - (window.pixelw > 5 ? 5 : window.pixelw));
-    if (isPressed(W))      map.d_camera.y = -(1+shift*2)*factor;
+    auto factor = pow(2, config.density-1) * (6 - (window.pixelw > 5 ? 5 : window.pixelw));
+    if      (isPressed(W)) map.d_camera.y = -(1+shift*2)*factor;
     else if (isPressed(S)) map.d_camera.y =  (1+shift*2)*factor;
     else                   map.d_camera.y =  0;
-    if (isPressed(A))      map.d_camera.x = -(1+shift*2)*factor;
+    if      (isPressed(A)) map.d_camera.x = -(1+shift*2)*factor;
     else if (isPressed(D)) map.d_camera.x =  (1+shift*2)*factor;
     else                   map.d_camera.x =  0;
 
@@ -345,7 +348,7 @@ int main(int argc, char** argv){
         .saveFile = "save.cells",
         .editColor = 10,
         .runningColor = 15,
-        .paseColor = 9,
+        .pauseColor = 9,
         .density = 1,
         .grid = true,
     };
