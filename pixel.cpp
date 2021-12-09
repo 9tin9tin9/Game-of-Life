@@ -258,13 +258,13 @@ void Pixel::render(bool gridlines, Color color)
     uint32_t* pixels;
     int pitch;
     SDL_LockTexture(sdl.texture, &sdl.rect, (void**)&pixels, &pitch);
+    const auto mh = window.h*window.pixelw;
+    const auto mw = window.w*window.pixelw;
 
     // grid lines
     if (gridlines)
     {
         const auto rgb = *(uint32_t*)&palate[color];
-        const auto mh = window.h*window.pixelw;
-        const auto mw = window.w*window.pixelw;
         // horizontal lines
         for (int i = 0; i < window.h; i++)
         {
