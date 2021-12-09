@@ -1,11 +1,12 @@
 #include <iostream>
 #include <deque>
 #include <unordered_set>
+#include <bitset>
 #include "pixel.hpp"
 #include "helpmsg.hpp"
 
 Pixel* p;
-const int sectorWidth = 30;
+const int sectorWidth = sizeof(std::bitset<1>);
 
 struct Config {
     bool edit;
@@ -25,11 +26,11 @@ struct Map{
     Pixel::Coor d_camera = {0, 0};
 
     struct Sector{
-        std::vector<std::vector<bool>> plane;
+        std::vector<std::bitset<sectorWidth>> plane;
         Sector() {
-            plane = std::vector<std::vector<bool>>(sectorWidth, std::vector<bool>(sectorWidth, false));
+            plane = std::vector<std::bitset<sectorWidth>>(sectorWidth, 0);
         }
-        std::vector<bool>::reference at(Pixel::Coor c){
+        std::bitset<sectorWidth>::reference at(Pixel::Coor c){
             return plane[c.y][c.x];
         }
     };
@@ -83,11 +84,10 @@ struct Map{
         return {sector, relative};
     }
 
-    std::vector<bool>::reference at(const Pixel::Coor c) {
+    std::bitset<sectorWidth>::reference at(const Pixel::Coor c) {
         auto offset = _at(c);
         return map[offset.first.y][offset.first.x].at(offset.second);
     }
-
 };
 
 typedef std::unordered_set<Pixel::Coor, Pixel::Coor::Hash> Cells;
