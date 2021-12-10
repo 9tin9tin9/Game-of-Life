@@ -1,12 +1,13 @@
 #include <iostream>
-#include <deque>
 #include <unordered_set>
 #include <bitset>
+#include <cmath>
 #include "pixel.hpp"
 #include "helpmsg.hpp"
+#include "deque.hpp"
 
 Pixel* p;
-const int sectorWidth = sizeof(std::bitset<1>);
+const int sectorWidth = 32;
 
 struct Config {
     bool edit;
@@ -32,24 +33,30 @@ struct Map{
     Pixel::Coor d_camera = {0, 0};
 
     struct Sector{
-        std::vector<std::bitset<sectorWidth>> plane;
+        std::vector<uint32_t> plane;
         Sector() {
-            plane = std::vector<std::bitset<sectorWidth>>(sectorWidth, 0);
+            plane = std::vector<uint32_t>(sectorWidth, 0);
         }
-        std::bitset<sectorWidth>::reference at(Pixel::Coor c){
-            return plane[c.y][c.x];
+        bool at(Pixel::Coor c){
+            return plane[c.y] & 1 << c.x;
+        }
+        void set(Pixel::Coor c, bool val){
+            val?
+                plane[c.y] |= 1 << c.x :
+                plane[c.y] &= ~(1 << c.x);
         }
     };
-    std::deque<std::deque<Sector>> map;
+    Deque<Deque<Sector>> map;
     int top, bottom;
     // Boundaries of each row: pair<left, right>
-    std::deque<std::pair<int, int>> boundaries;
+    Deque<std::pair<int, int>> boundaries;
 
     Map(){
-        map = { { Sector() } };
+        map.push_back({});
+        map[0].push_back(Sector());
         top = 0;
         bottom = 1;
-        boundaries = { {0, 1} };
+        boundaries.push_back({0, 1});
     }
 
     Pixel::Coor actual(Pixel::Coor onScreen, Config config){
@@ -61,8 +68,8 @@ struct Map{
     // Allocate if necessary
     std::pair<Pixel::Coor, Pixel::Coor> _at(const Pixel::Coor c){
         // Allocate
-        int my = floor(c.y, sectorWidth);
-        int mx = floor(c.x, sectorWidth);
+        int my = std::floorf((float)c.y/sectorWidth);
+        int mx = std::floorf((float)c.x/sectorWidth);
         while(my < top){
             map.push_front({});
             boundaries.push_front({0, 0});
@@ -73,14 +80,14 @@ struct Map{
             boundaries.push_back({0, 0});
             bottom++;
         }
-        auto& b = boundaries.at(my-top);
+        auto& b = boundaries[my-top];
         auto a = my-top;
         while(mx < b.first){
-            map.at(a).push_front(Sector());
+            map[a].push_front(Sector());
             b.first--;
         }
         while(mx >= b.second){
-            map.at(a).push_back(Sector());
+            map[a].push_back(Sector());
             b.second++;
         }
         // Calculate which sector and relative coordinates
@@ -90,11 +97,13 @@ struct Map{
         return {sector, relative};
     }
 
-    std::bitset<sectorWidth>::reference at(const Pixel::Coor c) {
+    bool at(const Pixel::Coor c) {
         auto offset = _at(c);
         return map[offset.first.y][offset.first.x].at(offset.second);
-        // std::bitset<sectorWidth> a (0);
-        // return a[0];
+    }
+    void set(const Pixel::Coor c, bool val) {
+        auto offset = _at(c);
+        map[offset.first.y][offset.first.x].set(offset.second, val);
     }
 };
 
@@ -269,7 +278,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                 case SDL_SCANCODE_C:
                     if (config.edit) {
                        for (auto c : cells)
-                           map.at(c) = false;
+                           map.set(c, false);
                        cells.clear();
                     }
                     break;
@@ -307,8 +316,8 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                         }
                     }
                     oldSize = p->getWindowSize();
-                    newH = floor((float)oldSize.first/newP);
-                    newW = floor((float)oldSize.second/newP);
+                    newH = std::floorf((float)oldSize.first/newP);
+                    newW = std::floorf((float)oldSize.second/newP);
                     p->resizeWindow(newH, newW, newP);
                     // set window size again to keep original size
                     p->setWindowSize(oldSize.first, oldSize.second);
@@ -323,7 +332,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     }
 
     // Move camera
-    auto factor = pow(2, config.density-1) * (6 - (window.pixelw > 5 ? 5 : window.pixelw));
+    auto factor = (1 << (config.density-1)) * (6 - (window.pixelw > 5 ? 5 : window.pixelw));
     if      (isPressed(W)) map.d_camera.y = -(1+shift*2)*factor;
     else if (isPressed(S)) map.d_camera.y =  (1+shift*2)*factor;
     else                   map.d_camera.y =  0;
@@ -336,10 +345,10 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
         SDL_GetMouseState(&c.x, &c.y);
         auto actual = map.actual(p->fromScreenCoor(c), config);
         if (shift){
-            map.at(actual) = false;
+            map.set(actual, false);
             cells.erase(actual);
         }else{
-            map.at(actual) = true;
+            map.set(actual, true);
             cells.insert(actual);
         }
     }
@@ -365,7 +374,7 @@ int main(int argc, char** argv){
     SDL_Event e;
     Cells cells = loadStateFromFile(config.loadFile);
     for (auto c : cells){
-        map.at(c) = true;
+        map.set(c, true);
     }
     draw(cells, map, config.editColor, config);
     Pixel::Coor c;
@@ -377,7 +386,7 @@ int main(int argc, char** argv){
         uint32_t frameStart = SDL_GetTicks();
 
         // Event loop
-        while(config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e)){
+        config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e);
             switch (e.type){
                 case SDL_QUIT:
                     exit(0);
@@ -390,14 +399,14 @@ int main(int argc, char** argv){
                     auto keyStates = SDL_GetKeyboardState(NULL);
                     controls(e, map, cells, keyStates, config);
             }
-        }
+        
 
         // Update camera
         map.camera.y += map.d_camera.y;
         map.camera.x += map.d_camera.x;
 
         // Rules
-        auto nextFrameTime = timeStamp + timeWait * pow(2, -config.fastForward);
+        auto nextFrameTime = timeStamp + timeWait * std::pow(2, -config.fastForward);
         if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
             Cells nextGenLive;
@@ -415,9 +424,9 @@ int main(int argc, char** argv){
             }
 
             for (auto c : nextGenLive)
-                map.at(c) = true;
+                map.set(c, true);
             for (auto c : nextGenDie)
-                map.at(c) = false;
+                map.set(c, false);
             cells = nextGenLive;
         }
 
