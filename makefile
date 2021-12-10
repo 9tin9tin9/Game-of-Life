@@ -10,14 +10,14 @@ OBJ = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(FILE_NAMES)))
 
 build:
 	@if [[ ! -e $(OBJDIR) ]]; then mkdir $(OBJDIR); echo created \'$(OBJDIR)\' directory; fi
-	@if [[ ! -e $(OBJDIR)/release/ ]]; then mkdir $(OBJDIR)/release; echo created \'$(OBJDIR)/release\' directory; fi
-	@rm -rf $(OBJDIR)/release/*
+	@if [[ ! -e $(OBJDIR)/bin/ ]]; then mkdir $(OBJDIR)/bin; echo created \'$(OBJDIR)/bin\' directory; fi
+	@rm -rf $(OBJDIR)/bin/*
 	@make main
-	@mv main $(OBJDIR)/release
-	@if [[ -e main.dSYM ]];then mv main.dSYM $(OBJDIR)/release/; fi
+	@mv main $(OBJDIR)/bin
+	@if [[ -e main.dSYM ]];then mv main.dSYM $(OBJDIR)/bin/; fi
 
 run:
-	@./$(OBJDIR)/release/main
+	@./$(OBJDIR)/bin/main
 
 main: $(OBJ)
 

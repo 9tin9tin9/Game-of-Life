@@ -19,6 +19,12 @@ struct Config {
     bool grid;
 };
 
+int floor(int a, int b){
+    float x = (float)a/b;
+    int i = (int)x;
+    return i - ( i > x );
+}
+
 // Infinite grid
 struct Map{
     // Actual coordinate of top left pixel
@@ -55,8 +61,8 @@ struct Map{
     // Allocate if necessary
     std::pair<Pixel::Coor, Pixel::Coor> _at(const Pixel::Coor c){
         // Allocate
-        int my = floor((float)c.y/sectorWidth);
-        int mx = floor((float)c.x/sectorWidth);
+        int my = floor(c.y, sectorWidth);
+        int mx = floor(c.x, sectorWidth);
         while(my < top){
             map.push_front({});
             boundaries.push_front({0, 0});
@@ -87,6 +93,8 @@ struct Map{
     std::bitset<sectorWidth>::reference at(const Pixel::Coor c) {
         auto offset = _at(c);
         return map[offset.first.y][offset.first.x].at(offset.second);
+        // std::bitset<sectorWidth> a (0);
+        // return a[0];
     }
 };
 
@@ -177,30 +185,28 @@ void saveStateToFile(std::string saveFile, Cells& cells){
 }
 
 bool checkLiveOrDie(Pixel::Coor c, Map& map){
-        auto neighbours = 0;
-        neighbours += map.at({c.y-1, c.x-1});
-        neighbours += map.at({c.y-1, c.x  });
-        neighbours += map.at({c.y-1, c.x+1});
-        neighbours += map.at({c.y  , c.x-1});
-        neighbours += map.at({c.y  , c.x+1});
-        neighbours += map.at({c.y+1, c.x-1});
-        neighbours += map.at({c.y+1, c.x  });
-        neighbours += map.at({c.y+1, c.x+1});
+        auto n = 0;
+        n += map.at({c.y-1, c.x-1});
+        n += map.at({c.y-1, c.x  });
+        n += map.at({c.y-1, c.x+1});
+        n += map.at({c.y  , c.x-1});
+        n += map.at({c.y  , c.x+1});
+        n += map.at({c.y+1, c.x-1});
+        n += map.at({c.y+1, c.x  });
+        n += map.at({c.y+1, c.x+1});
         auto isLive = map.at(c);
-        // Any live cell with less than two or more than three live neighbours dies;
-        if (neighbours < 2 || neighbours > 3)
-            return false;
-
         // Any live cell with two or three live neighbours survives.
-        else if (isLive)
-            return true;
-
         // Any dead cell with three live neighbours becomes a live cell.
-        else if (!isLive && neighbours == 3)
+        if (isLive && (n == 2 || n == 3) || (!isLive && n == 3))
             return true;
-        
         // Dead cells remains dead.
         return false;
+
+        /*
+        if ((n == 2 || n == 3) || (!isLive && n == 3))
+            return true;
+        return false;
+        */
 }
 
 void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){

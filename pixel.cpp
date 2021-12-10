@@ -231,7 +231,7 @@ std::pair<int, int> Pixel::getWindowSize()
 
 Pixel::Coor Pixel::fromScreenCoor(Coor c)
 {
-    return {(int)(c.y+0.5)/window.pixelw, (int)(c.x)/window.pixelw};
+    return {(int)((c.y+0.5)/window.pixelw), c.x/window.pixelw};
 }
 
 void Pixel::set(Coor c, Color color)
@@ -243,14 +243,7 @@ void Pixel::set(Coor c, Color color)
 
 void Pixel::clear()
 {
-    std::fill(buffer.begin(), buffer.end(),
-            *(uint32_t*)&palate[base]);
-}
-
-void Pixel::refresh()
-{
-    SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
-    SDL_RenderPresent(sdl.renderer);
+    std::fill(buffer.begin(), buffer.end(), *(uint32_t*)&palate[base]);
 }
 
 void Pixel::render(bool gridlines, Color color)
@@ -260,6 +253,7 @@ void Pixel::render(bool gridlines, Color color)
     SDL_LockTexture(sdl.texture, &sdl.rect, (void**)&pixels, &pitch);
     const auto mh = window.h*window.pixelw;
     const auto mw = window.w*window.pixelw;
+    const auto mmw = window.pixelw * mw;
 
     // grid lines
     if (gridlines)
@@ -268,17 +262,19 @@ void Pixel::render(bool gridlines, Color color)
         // horizontal lines
         for (int i = 0; i < window.h; i++)
         {
-            auto start = buffer.begin() + i * window.pixelw * mw;
+            auto start = buffer.begin() + i * mmw;
             std::fill(start, start + mw, rgb);
         }
         // vertical lines
         for (int i = 0; i < mh; i++)
             for (int j = 0; j < window.w; j++)
-                buffer[i * mw + j*window.pixelw] = rgb;
+                buffer[i * mw + j * window.pixelw] = rgb;
             
     }
 
     std::copy(buffer.begin(), buffer.end(), pixels);
     SDL_UnlockTexture(sdl.texture);
-    refresh();
+    SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
+
+    SDL_RenderPresent(sdl.renderer);
 }
