@@ -479,25 +479,28 @@ int main(int argc, char** argv){
         auto nextFrameTime = timeStamp + timeWait * std::pow(2, -config.fastForward);
         if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
-            Cells nextGenLive;
-            Cells nextGenDie;
-            for (auto cell : cells){
-                auto buf = 2;
-                for (int i = cell.y-buf; i < cell.y+buf; i++){
-                    for (int j = cell.x - buf; j < cell.x+buf; j++){
-                        Pixel::Coor c  = {i, j};
-                        auto isLive = checkLiveOrDie(c, &map);
-                        if (isLive) nextGenLive.insert(c);
-                        else nextGenDie.insert(c);
-                    }
-                }
-            }
+            // multithread
+            rules(cells, map);
 
-            for (auto c : nextGenLive)
-                map.set(c, true);
-            for (auto c : nextGenDie)
-                map.set(c, false);
-            cells = nextGenLive;
+            // single thread
+            // Cells nextGenLive;
+            // Cells nextGenDie;
+            // for (auto cell : cells){
+            //     auto buf = 2;
+            //     for (int i = cell.y-buf; i < cell.y+buf; i++){
+            //         for (int j = cell.x - buf; j < cell.x+buf; j++){
+            //             Pixel::Coor c  = {i, j};
+            //             auto isLive = checkLiveOrDie(c, &map);
+            //             if (isLive) nextGenLive.insert(c);
+            //             else nextGenDie.insert(c);
+            //         }
+            //     }
+            // }
+            // for (auto c : nextGenLive)
+            //     map.set(c, true);
+            // for (auto c : nextGenDie)
+            //     map.set(c, false);
+            // cells = nextGenLive;
         }
 
         Pixel::Color color = config.edit? config.editColor : config.runningColor;
