@@ -1,6 +1,5 @@
 #include <iostream>
 #include <unordered_set>
-#include <thread>
 #include <bitset>
 #include <cmath>
 #include <pthread.h>
@@ -25,6 +24,12 @@ struct Config {
     int density;
     bool grid;
 };
+
+int floor(int a, int b){
+    float x = (float)a/b;
+    int i = (int)x;
+    return i - ( i > x );
+}
 
 // Infinite grid
 struct Map{
@@ -102,18 +107,8 @@ struct Map{
     }
 
     bool at(const Pixel::Coor c) {
-        // no need allocate
-        int my = std::floorf((float)c.y/sectorWidth);
-        int mx = std::floorf((float)c.x/sectorWidth);
-        if (my < top || my >= bottom)
-            return false;
-        auto& b = boundaries[my-top];
-        auto a = my-top;
-        if (mx < b.first || mx >= b.second)
-            return false;
-        Pixel::Coor sector = { a, mx - b.first };
-        Pixel::Coor relative = { c.y - my*sectorWidth, c.x - mx*sectorWidth };
-        return map[sector.y][sector.x].at(relative);
+        auto offset = _at(c);
+        return map[offset.first.y][offset.first.x].at(offset.second);
     }
     void set(const Pixel::Coor c, bool val) {
         auto offset = _at(c);
@@ -226,7 +221,6 @@ bool checkLiveOrDie(Pixel::Coor c, Map* map){
         return false;
 
         /*
-        // This is beautiful, so this is not deleted
         if ((n == 2 || n == 3) || (!isLive && n == 3))
             return true;
         return false;
@@ -357,7 +351,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
 
     // Edit
     if (config.edit && space){
-        SDL_GetMouseState((int*)&c.x, (int*)&c.y);
+        SDL_GetMouseState(&c.x, &c.y);
         auto actual = map.actual(p->fromScreenCoor(c), config);
         if (shift){
             map.set(actual, false);
@@ -462,7 +456,7 @@ int main(int argc, char** argv){
         uint32_t frameStart = SDL_GetTicks();
 
         // Event loop
-        while(config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e)){
+        config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e);
             switch (e.type){
                 case SDL_QUIT:
                     exit(0);
@@ -474,19 +468,36 @@ int main(int argc, char** argv){
                 default:
                     auto keyStates = SDL_GetKeyboardState(NULL);
                     controls(e, map, cells, keyStates, config);
-                    break;
             }
-        }
+        
 
         // Update camera
         map.camera.y += map.d_camera.y;
         map.camera.x += map.d_camera.x;
 
         // Rules
-        auto nextFrameTime = timeStamp + (timeWait >> config.fastForward);
+        auto nextFrameTime = timeStamp + timeWait * std::pow(2, -config.fastForward);
         if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
-            rules(cells, map);
+            Cells nextGenLive;
+            Cells nextGenDie;
+            for (auto cell : cells){
+                auto buf = 2;
+                for (int i = cell.y-buf; i < cell.y+buf; i++){
+                    for (int j = cell.x - buf; j < cell.x+buf; j++){
+                        Pixel::Coor c  = {i, j};
+                        auto isLive = checkLiveOrDie(c, &map);
+                        if (isLive) nextGenLive.insert(c);
+                        else nextGenDie.insert(c);
+                    }
+                }
+            }
+
+            for (auto c : nextGenLive)
+                map.set(c, true);
+            for (auto c : nextGenDie)
+                map.set(c, false);
+            cells = nextGenLive;
         }
 
         Pixel::Color color = config.edit? config.editColor : config.runningColor;

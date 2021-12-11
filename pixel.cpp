@@ -244,8 +244,6 @@ void Pixel::set(Coor c, Color color)
 void Pixel::clear()
 {
     std::fill(buffer.begin(), buffer.end(), *(uint32_t*)&palate[base]);
-    SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(sdl.renderer);
 }
 
 void Pixel::render(bool gridlines, Color color)
@@ -275,6 +273,10 @@ void Pixel::render(bool gridlines, Color color)
                     i*window.pixelw, mh);
         }
     }
+
+    std::copy(buffer.begin(), buffer.end(), pixels);
+    SDL_UnlockTexture(sdl.texture);
+    SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
 
     SDL_RenderPresent(sdl.renderer);
 }
