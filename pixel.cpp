@@ -263,7 +263,7 @@ void Pixel::render(bool gridlines, Color color)
         const auto mmw = window.pixelw * mw;
         auto rgb = palate[color];
         SDL_SetRenderDrawColor(sdl.renderer,
-                rgb.r, rgb.b, rgb.g, rgb.a);
+                rgb.r, rgb.g, rgb.b, rgb.a);
         for (int i = 0; i < window.h; i++){
             SDL_RenderDrawLine(sdl.renderer,
                     0, i*window.pixelw,

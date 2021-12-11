@@ -3,14 +3,17 @@
 #include <thread>
 #include <bitset>
 #include <cmath>
+#include <pthread.h>
 #include "pixel.hpp"
 #include "helpmsg.hpp"
 #include "deque.hpp"
 
 Pixel* p;
-const int sectorWidth = 64;
+const int sectorWidth = 1024;
 typedef uint64_t sectorType;
-const int threads = 3;
+const auto sectorTypeWidth = sizeof(sectorType)*8;
+const int sectorTypeWidthPow = log2(sectorTypeWidth);
+const int threadCellCount = 1000;
 
 struct Config {
     bool edit;
@@ -31,17 +34,20 @@ struct Map{
 
     struct Sector{
         const sectorType modifier = 1;
-        std::vector<sectorType> plane;
+        std::vector<std::vector<sectorType>> plane;
         Sector() {
-            plane = std::vector<sectorType>(sectorWidth, 0);
+            plane = std::vector<std::vector<sectorType>>(sectorWidth,
+                        std::vector<sectorType>(
+                            sectorWidth/sectorTypeWidth,
+                            0));
         }
-        bool at(Pixel::Coor c){
-            return plane[c.y] & modifier << c.x;
+        bool at(const Pixel::Coor c){
+            return plane[c.y][c.x >> sectorTypeWidthPow] & modifier << (c.x%sectorTypeWidth);
         }
-        void set(Pixel::Coor c, bool val){
+        void set(const Pixel::Coor c, const bool val){
             val?
-                plane[c.y] |= modifier << c.x :
-                plane[c.y] &= ~(modifier << c.x);
+                plane[c.y][c.x >> sectorTypeWidthPow] |= modifier << (c.x%sectorTypeWidth) :
+                plane[c.y][c.x >> sectorTypeWidthPow] &= ~(modifier << (c.x%sectorTypeWidth));
         }
     };
     Deque<Deque<Sector>> map;
@@ -201,17 +207,17 @@ void saveStateToFile(std::string saveFile, Cells& cells){
     f.close();
 }
 
-bool checkLiveOrDie(Pixel::Coor c, Map& map){
+bool checkLiveOrDie(Pixel::Coor c, Map* map){
         auto n = 0;
-        n += map.at({c.y-1, c.x-1});
-        n += map.at({c.y-1, c.x  });
-        n += map.at({c.y-1, c.x+1});
-        n += map.at({c.y  , c.x-1});
-        n += map.at({c.y  , c.x+1});
-        n += map.at({c.y+1, c.x-1});
-        n += map.at({c.y+1, c.x  });
-        n += map.at({c.y+1, c.x+1});
-        auto isLive = map.at(c);
+        n += map->at({c.y-1, c.x-1});
+        n += map->at({c.y-1, c.x  });
+        n += map->at({c.y-1, c.x+1});
+        n += map->at({c.y  , c.x-1});
+        n += map->at({c.y  , c.x+1});
+        n += map->at({c.y+1, c.x-1});
+        n += map->at({c.y+1, c.x  });
+        n += map->at({c.y+1, c.x+1});
+        auto isLive = map->at(c);
         // Any live cell with two or three live neighbours survives.
         // Any dead cell with three live neighbours becomes a live cell.
         if (isLive && (n == 2 || n == 3) || (!isLive && n == 3))
@@ -363,6 +369,67 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     }
 }
 
+void* runRules(void* _){
+    void** args = (void**)_;
+    auto cells = (std::vector<Pixel::Coor>*)args[0];
+    auto start = *(int*)args[1];
+    auto end = *(int*)args[2];
+    auto nextGenLive = (Cells*)args[3];
+    auto nextGenDie = (Cells*)args[4];
+    auto map = (Map*)args[5];
+    auto buf = 2;
+    for (int k = start; k < end; k++){
+        auto cell = cells->at(k);
+        for (int i = cell.y-buf; i < cell.y+buf; i++){
+            for (int j = cell.x - buf; j < cell.x+buf; j++){
+                Pixel::Coor c  = {i, j};
+                auto isLive = checkLiveOrDie(c, map);
+                if (isLive) nextGenLive->insert(c);
+                else nextGenDie->insert(c);
+            }
+        }
+    }
+    return NULL;
+}
+
+void rules(Cells& cells, Map& map){
+    const auto size = cells.size();
+    size_t threadCount = size/threadCellCount+1;
+    pthread_t threads[threadCount];
+    Cells nextGenLives[threadCount];
+    Cells nextGenDies[threadCount];
+    std::vector<Pixel::Coor> vcells (cells.begin(), cells.end());
+    void* args[threadCount][6];
+    int start[threadCount];
+    int end[threadCount];
+    for (int i = 0; i < threadCount; i++){
+        start[i] = i*threadCellCount;
+        end[i] = (i+1)*threadCellCount;
+        start[i] = start[i] >= size ? size : start[i];
+        end[i] = end[i] >= size ? size : end[i];
+        args[i][0] = &vcells;
+        args[i][1] = &start[i];
+        args[i][2] = &end[i];
+        args[i][3] = &nextGenLives[i];
+        args[i][4] = &nextGenDies[i];
+        args[i][5] = &map;
+        pthread_create(&threads[i], NULL, runRules, args[i]);
+    }
+    for (int i = 0; i < threadCount; i++){
+        pthread_join(threads[i], NULL);
+    }
+    cells.clear();
+    for (auto n : nextGenLives){
+        for (auto c : n)
+            map.set(c, true);
+        cells.insert(n.begin(), n.end());
+    }
+    for (auto n : nextGenDies){
+        for (auto c : n)
+            map.set(c, false);
+    }
+}
+
 int main(int argc, char** argv){
     Config config = {
         .edit = true,
@@ -419,24 +486,7 @@ int main(int argc, char** argv){
         auto nextFrameTime = timeStamp + (timeWait >> config.fastForward);
         if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
-            Cells nextGenLive;
-            Cells nextGenDie;
-            for (auto cell : cells){
-                auto buf = 2;
-                for (int i = cell.y-buf; i < cell.y+buf; i++){
-                    for (int j = cell.x - buf; j < cell.x+buf; j++){
-                        Pixel::Coor c  = {i, j};
-                        auto isLive = checkLiveOrDie(c, map);
-                        if (isLive) nextGenLive.insert(c);
-                        else nextGenDie.insert(c);
-                    }
-                }
-            }
-            for (auto c : nextGenLive)
-                map.set(c, true);
-            for (auto c : nextGenDie)
-                map.set(c, false);
-            cells = nextGenLive;
+            rules(cells, map);
         }
 
         Pixel::Color color = config.edit? config.editColor : config.runningColor;
