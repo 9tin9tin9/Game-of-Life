@@ -244,6 +244,8 @@ void Pixel::set(Coor c, Color color)
 void Pixel::clear()
 {
     std::fill(buffer.begin(), buffer.end(), *(uint32_t*)&palate[base]);
+    SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(sdl.renderer);
 }
 
 void Pixel::render(bool gridlines, Color color)
@@ -251,30 +253,28 @@ void Pixel::render(bool gridlines, Color color)
     uint32_t* pixels;
     int pitch;
     SDL_LockTexture(sdl.texture, &sdl.rect, (void**)&pixels, &pitch);
-    const auto mh = window.h*window.pixelw;
-    const auto mw = window.w*window.pixelw;
-    const auto mmw = window.pixelw * mw;
-
-    // grid lines
-    if (gridlines)
-    {
-        const auto rgb = *(uint32_t*)&palate[color];
-        // horizontal lines
-        for (int i = 0; i < window.h; i++)
-        {
-            auto start = buffer.begin() + i * mmw;
-            std::fill(start, start + mw, rgb);
-        }
-        // vertical lines
-        for (int i = 0; i < mh; i++)
-            for (int j = 0; j < window.w; j++)
-                buffer[i * mw + j * window.pixelw] = rgb;
-            
-    }
-
     std::copy(buffer.begin(), buffer.end(), pixels);
     SDL_UnlockTexture(sdl.texture);
-    SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
+    SDL_RenderCopy(sdl.renderer, sdl.texture, &sdl.rect, &sdl.rect);
+
+    if (gridlines){
+        const auto mh = window.h*window.pixelw;
+        const auto mw = window.w*window.pixelw;
+        const auto mmw = window.pixelw * mw;
+        auto rgb = palate[color];
+        SDL_SetRenderDrawColor(sdl.renderer,
+                rgb.r, rgb.b, rgb.g, rgb.a);
+        for (int i = 0; i < window.h; i++){
+            SDL_RenderDrawLine(sdl.renderer,
+                    0, i*window.pixelw,
+                    mw, i*window.pixelw);
+        }
+        for (int i = 0; i < window.w; i++){
+            SDL_RenderDrawLine(sdl.renderer,
+                    i*window.pixelw, 0,
+                    i*window.pixelw, mh);
+        }
+    }
 
     SDL_RenderPresent(sdl.renderer);
 }
