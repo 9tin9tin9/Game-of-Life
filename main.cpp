@@ -25,12 +25,6 @@ struct Config {
     bool grid;
 };
 
-int floor(int a, int b){
-    float x = (float)a/b;
-    int i = (int)x;
-    return i - ( i > x );
-}
-
 // Infinite grid
 struct Map{
     // Actual coordinate of top left pixel
@@ -46,13 +40,13 @@ struct Map{
                             sectorWidth/sectorTypeWidth,
                             0));
         }
-        bool at(const Pixel::Coor c){
-            return plane[c.y][c.x >> sectorTypeWidthPow] & modifier << (c.x%sectorTypeWidth);
+        bool at(const Pixel::Coor* c){
+            return plane[c->y][c->x >> sectorTypeWidthPow] & modifier << (c->x%sectorTypeWidth);
         }
-        void set(const Pixel::Coor c, const bool val){
+        void set(const Pixel::Coor* c, const bool val){
             val?
-                plane[c.y][c.x >> sectorTypeWidthPow] |= modifier << (c.x%sectorTypeWidth) :
-                plane[c.y][c.x >> sectorTypeWidthPow] &= ~(modifier << (c.x%sectorTypeWidth));
+                plane[c->y][c->x >> sectorTypeWidthPow] |= modifier << (c->x%sectorTypeWidth) :
+                plane[c->y][c->x >> sectorTypeWidthPow] &= ~(modifier << (c->x%sectorTypeWidth));
         }
     };
     Deque<Deque<Sector>> map;
@@ -68,17 +62,17 @@ struct Map{
         boundaries.push_back({0, 1});
     }
 
-    Pixel::Coor actual(Pixel::Coor onScreen, Config config){
+    Pixel::Coor actual(const Pixel::Coor* onScreen, const Config* config){
         return {
-            camera.y+onScreen.y*config.density,
-            camera.x+onScreen.x*config.density};
+            camera.y+onScreen->y*config->density,
+            camera.x+onScreen->x*config->density};
     }
 
     // Allocate if necessary
-    std::pair<Pixel::Coor, Pixel::Coor> _at(const Pixel::Coor c){
+    std::pair<Pixel::Coor, Pixel::Coor> _at(const Pixel::Coor* c){
         // Allocate
-        int my = std::floorf((float)c.y/sectorWidth);
-        int mx = std::floorf((float)c.x/sectorWidth);
+        int my = std::floorf((float)c->y/sectorWidth);
+        int mx = std::floorf((float)c->x/sectorWidth);
         while(my < top){
             map.push_front({});
             boundaries.push_front({0, 0});
@@ -101,18 +95,18 @@ struct Map{
         }
         // Calculate which sector and relative coordinates
         Pixel::Coor sector = { a, mx - b.first };
-        Pixel::Coor relative = { c.y - my*sectorWidth, c.x - mx*sectorWidth };
+        Pixel::Coor relative = { c->y - my*sectorWidth, c->x - mx*sectorWidth };
         
         return {sector, relative};
     }
 
-    bool at(const Pixel::Coor c) {
+    bool at(const Pixel::Coor* c) {
         auto offset = _at(c);
-        return map[offset.first.y][offset.first.x].at(offset.second);
+        return map[offset.first.y][offset.first.x].at(&offset.second);
     }
-    void set(const Pixel::Coor c, bool val) {
+    void set(const Pixel::Coor* c, bool val) {
         auto offset = _at(c);
-        map[offset.first.y][offset.first.x].set(offset.second, val);
+        map[offset.first.y][offset.first.x].set(&offset.second, val);
     }
 };
 
@@ -202,16 +196,17 @@ void saveStateToFile(std::string saveFile, Cells& cells){
     f.close();
 }
 
-bool checkLiveOrDie(Pixel::Coor c, Map* map){
+bool checkLiveOrDie(const Pixel::Coor* c, Map* map){
         auto n = 0;
-        n += map->at({c.y-1, c.x-1});
-        n += map->at({c.y-1, c.x  });
-        n += map->at({c.y-1, c.x+1});
-        n += map->at({c.y  , c.x-1});
-        n += map->at({c.y  , c.x+1});
-        n += map->at({c.y+1, c.x-1});
-        n += map->at({c.y+1, c.x  });
-        n += map->at({c.y+1, c.x+1});
+        Pixel::Coor d;
+        d = (Pixel::Coor){c->y-1, c->x-1}; n += map->at(&d);
+        d = (Pixel::Coor){c->y-1, c->x  }; n += map->at(&d);
+        d = (Pixel::Coor){c->y-1, c->x+1}; n += map->at(&d);
+        d = (Pixel::Coor){c->y  , c->x-1}; n += map->at(&d);
+        d = (Pixel::Coor){c->y  , c->x+1}; n += map->at(&d);
+        d = (Pixel::Coor){c->y+1, c->x-1}; n += map->at(&d);
+        d = (Pixel::Coor){c->y+1, c->x  }; n += map->at(&d);
+        d = (Pixel::Coor){c->y+1, c->x+1}; n += map->at(&d);
         auto isLive = map->at(c);
         // Any live cell with two or three live neighbours survives.
         // Any dead cell with three live neighbours becomes a live cell.
@@ -219,18 +214,12 @@ bool checkLiveOrDie(Pixel::Coor c, Map* map){
             return true;
         // Dead cells remains dead.
         return false;
-
-        /*
-        if ((n == 2 || n == 3) || (!isLive && n == 3))
-            return true;
-        return false;
-        */
 }
 
 void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
     p->clear();
     auto win = p->getWindow();
-    for (auto c : cells){
+    for (auto& c : cells){
         p->set(
             {(c.y-map.camera.y)/config.density,
             (c.x-map.camera.x)/config.density},
@@ -243,9 +232,9 @@ void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
 
 #define isPressed(k_) (keyStates[SDL_SCANCODE_##k_])
 
-void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Config& config){
+void controls(const SDL_Event* e, Map& map, Cells& cells, const uint8_t* keyStates, Config& config){
     Pixel::Coor c;
-    if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_P){
+    if (e->type == SDL_KEYDOWN && e->key.keysym.scancode == SDL_SCANCODE_P){
         config.pause = !config.pause;
         draw(cells, map,
             (config.pause ? config.pauseColor :
@@ -255,9 +244,9 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     }
     // Command during pause
     if (config.pause){
-        switch (e.type){
+        switch (e->type){
             case SDL_KEYDOWN:
-                switch (e.key.keysym.scancode){
+                switch (e->key.keysym.scancode){
                     default: break;
 
                     // Save
@@ -275,9 +264,9 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     int newH, newW, newP;
     std::pair<int, int> oldSize;
     // Command during not pause
-    switch (e.type){
+    switch (e->type){
         case SDL_KEYDOWN:
-            switch (e.key.keysym.scancode){
+            switch (e->key.keysym.scancode){
                 default: break;
                 
                 // Edit mode
@@ -286,8 +275,8 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                 // Clear cells during editing mode
                 case SDL_SCANCODE_C:
                     if (config.edit) {
-                       for (auto c : cells)
-                           map.set(c, false);
+                       for (auto& c : cells)
+                           map.set(&c, false);
                        cells.clear();
                     }
                     break;
@@ -308,7 +297,7 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
                 // Enlarge and shrink pixels
                 case SDL_SCANCODE_M:
                 case SDL_SCANCODE_N:
-                    if (e.key.keysym.scancode == SDL_SCANCODE_M){
+                    if (e->key.keysym.scancode == SDL_SCANCODE_M){
                         // further shrinken pixels after pixelw = 1
                         if (config.density > 1){
                             config.density--;
@@ -352,12 +341,13 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
     // Edit
     if (config.edit && space){
         SDL_GetMouseState(&c.x, &c.y);
-        auto actual = map.actual(p->fromScreenCoor(c), config);
+        auto screenScoor = p->fromScreenCoor(c);
+        auto actual = map.actual(&screenScoor, &config);
         if (shift){
-            map.set(actual, false);
+            map.set(&actual, false);
             cells.erase(actual);
         }else{
-            map.set(actual, true);
+            map.set(&actual, true);
             cells.insert(actual);
         }
     }
@@ -365,19 +355,21 @@ void controls(SDL_Event e, Map& map, Cells& cells, const uint8_t* keyStates, Con
 
 void* runRules(void* _){
     void** args = (void**)_;
-    auto cells = (std::vector<Pixel::Coor>*)args[0];
+    auto cells = (Cells*)args[0];
     auto start = *(int*)args[1];
     auto end = *(int*)args[2];
     auto nextGenLive = (Cells*)args[3];
     auto nextGenDie = (Cells*)args[4];
     auto map = (Map*)args[5];
     auto buf = 2;
-    for (int k = start; k < end; k++){
-        auto cell = cells->at(k);
+    auto it = cells->begin();
+    std::advance(it, start);
+    for (int k = start; k < end; k++, std::advance(it, 1)){
+        auto cell = *it;
         for (int i = cell.y-buf; i < cell.y+buf; i++){
             for (int j = cell.x - buf; j < cell.x+buf; j++){
                 Pixel::Coor c  = {i, j};
-                auto isLive = checkLiveOrDie(c, map);
+                auto isLive = checkLiveOrDie(&c, map);
                 if (isLive) nextGenLive->insert(c);
                 else nextGenDie->insert(c);
             }
@@ -392,7 +384,6 @@ void rules(Cells& cells, Map& map){
     pthread_t threads[threadCount];
     Cells nextGenLives[threadCount];
     Cells nextGenDies[threadCount];
-    std::vector<Pixel::Coor> vcells (cells.begin(), cells.end());
     void* args[threadCount][6];
     int start[threadCount];
     int end[threadCount];
@@ -401,7 +392,7 @@ void rules(Cells& cells, Map& map){
         end[i] = (i+1)*threadCellCount;
         start[i] = start[i] >= size ? size : start[i];
         end[i] = end[i] >= size ? size : end[i];
-        args[i][0] = &vcells;
+        args[i][0] = &cells;
         args[i][1] = &start[i];
         args[i][2] = &end[i];
         args[i][3] = &nextGenLives[i];
@@ -413,14 +404,14 @@ void rules(Cells& cells, Map& map){
         pthread_join(threads[i], NULL);
     }
     cells.clear();
-    for (auto n : nextGenLives){
-        for (auto c : n)
-            map.set(c, true);
+    for (auto& n : nextGenLives){
+        for (auto& c : n)
+            map.set(&c, true);
         cells.insert(n.begin(), n.end());
     }
-    for (auto n : nextGenDies){
-        for (auto c : n)
-            map.set(c, false);
+    for (auto& n : nextGenDies){
+        for (auto& c : n)
+            map.set(&c, false);
     }
 }
 
@@ -443,8 +434,8 @@ int main(int argc, char** argv){
 
     SDL_Event e;
     Cells cells = loadStateFromFile(config.loadFile);
-    for (auto c : cells){
-        map.set(c, true);
+    for (auto& c : cells){
+        map.set(&c, true);
     }
     draw(cells, map, config.editColor, config);
     Pixel::Coor c;
@@ -467,7 +458,7 @@ int main(int argc, char** argv){
 
                 default:
                     auto keyStates = SDL_GetKeyboardState(NULL);
-                    controls(e, map, cells, keyStates, config);
+                    controls(&e, map, cells, keyStates, config);
             }
         
 
@@ -481,26 +472,6 @@ int main(int argc, char** argv){
             timeStamp = SDL_GetTicks();
             // multithread
             rules(cells, map);
-
-            // single thread
-            // Cells nextGenLive;
-            // Cells nextGenDie;
-            // for (auto cell : cells){
-            //     auto buf = 2;
-            //     for (int i = cell.y-buf; i < cell.y+buf; i++){
-            //         for (int j = cell.x - buf; j < cell.x+buf; j++){
-            //             Pixel::Coor c  = {i, j};
-            //             auto isLive = checkLiveOrDie(c, &map);
-            //             if (isLive) nextGenLive.insert(c);
-            //             else nextGenDie.insert(c);
-            //         }
-            //     }
-            // }
-            // for (auto c : nextGenLive)
-            //     map.set(c, true);
-            // for (auto c : nextGenDie)
-            //     map.set(c, false);
-            // cells = nextGenLive;
         }
 
         Pixel::Color color = config.edit? config.editColor : config.runningColor;
