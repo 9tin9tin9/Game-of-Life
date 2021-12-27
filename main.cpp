@@ -196,7 +196,7 @@ void saveStateToFile(std::string saveFile, Cells& cells){
     f.close();
 }
 
-bool checkLiveOrDie(const Pixel::Coor* c, Map* map){
+bool rules(const Pixel::Coor* c, Map* map){
         auto n = 0;
         Pixel::Coor d;
         d = (Pixel::Coor){c->y-1, c->x-1}; n += map->at(&d);
@@ -210,10 +210,15 @@ bool checkLiveOrDie(const Pixel::Coor* c, Map* map){
         auto isLive = map->at(c);
         // Any live cell with two or three live neighbours survives.
         // Any dead cell with three live neighbours becomes a live cell.
-        if (isLive && (n == 2 || n == 3) || (!isLive && n == 3))
+        if ((isLive && (n == 2 || n == 3)) || (!isLive && n == 3))
             return true;
         // Dead cells remains dead.
         return false;
+        /*
+        if ((n == 2 || n == 3) || (!isLive && n == 3))
+            return true;
+        return false;
+        */
 }
 
 void draw(Cells& cells, Map& map, Pixel::Color color, Config& config){
@@ -353,7 +358,7 @@ void controls(const SDL_Event* e, Map& map, Cells& cells, const uint8_t* keyStat
     }
 }
 
-void* runRules(void* _){
+void* forEachCell(void* _){
     void** args = (void**)_;
     auto cells = (Cells*)args[0];
     auto start = *(int*)args[1];
@@ -361,15 +366,15 @@ void* runRules(void* _){
     auto nextGenLive = (Cells*)args[3];
     auto nextGenDie = (Cells*)args[4];
     auto map = (Map*)args[5];
-    auto buf = 2;
+    auto buf = 1;
     auto it = cells->begin();
     std::advance(it, start);
     for (int k = start; k < end; k++, std::advance(it, 1)){
         auto cell = *it;
-        for (int i = cell.y-buf; i < cell.y+buf; i++){
-            for (int j = cell.x - buf; j < cell.x+buf; j++){
-                Pixel::Coor c  = {i, j};
-                auto isLive = checkLiveOrDie(&c, map);
+        for (int i = cell.y-buf; i <= cell.y+buf; i++){
+            for (int j = cell.x - buf; j <= cell.x+buf; j++){
+                Pixel::Coor c = {i, j};
+                auto isLive = rules(&c, map);
                 if (isLive) nextGenLive->insert(c);
                 else nextGenDie->insert(c);
             }
@@ -378,7 +383,7 @@ void* runRules(void* _){
     return NULL;
 }
 
-void rules(Cells& cells, Map& map){
+void startThreads(Cells& cells, Map& map){
     const auto size = cells.size();
     size_t threadCount = size/threadCellCount+1;
     pthread_t threads[threadCount];
@@ -398,7 +403,7 @@ void rules(Cells& cells, Map& map){
         args[i][3] = &nextGenLives[i];
         args[i][4] = &nextGenDies[i];
         args[i][5] = &map;
-        pthread_create(&threads[i], NULL, runRules, args[i]);
+        pthread_create(&threads[i], NULL, forEachCell, args[i]);
     }
     for (int i = 0; i < threadCount; i++){
         pthread_join(threads[i], NULL);
@@ -447,7 +452,7 @@ int main(int argc, char** argv){
         uint32_t frameStart = SDL_GetTicks();
 
         // Event loop
-        config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e);
+        while(config.pause ? SDL_WaitEvent(&e) : SDL_PollEvent(&e)){
             switch (e.type){
                 case SDL_QUIT:
                     exit(0);
@@ -460,6 +465,7 @@ int main(int argc, char** argv){
                     auto keyStates = SDL_GetKeyboardState(NULL);
                     controls(&e, map, cells, keyStates, config);
             }
+        }
         
 
         // Update camera
@@ -471,7 +477,7 @@ int main(int argc, char** argv){
         if (!config.edit && SDL_TICKS_PASSED(SDL_GetTicks(), nextFrameTime)){
             timeStamp = SDL_GetTicks();
             // multithread
-            rules(cells, map);
+            startThreads(cells, map);
         }
 
         Pixel::Color color = config.edit? config.editColor : config.runningColor;
