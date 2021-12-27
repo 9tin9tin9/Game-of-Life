@@ -274,9 +274,5 @@ void Pixel::render(bool gridlines, Color color)
         }
     }
 
-    std::copy(buffer.begin(), buffer.end(), pixels);
-    SDL_UnlockTexture(sdl.texture);
-    SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
-
     SDL_RenderPresent(sdl.renderer);
 }
