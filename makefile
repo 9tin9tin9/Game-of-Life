@@ -1,5 +1,5 @@
 CXX = clang++
-OPTFLAG = -g -Ofast
+OPTFLAG = -g -Ofast -flto
 STDFLAG = -std=c++17
 LDFLAGS = `pkg-config sdl2 --libs`
 CPPFLAGS = $(STDFLAG) $(OPTFLAG) -pipe `pkg-config sdl2 --cflags`

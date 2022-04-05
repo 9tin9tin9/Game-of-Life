@@ -3,6 +3,7 @@
 #include <bitset>
 #include <cmath>
 #include <pthread.h>
+#include <array>
 #include "pixel.hpp"
 #include "helpmsg.hpp"
 #include "deque.hpp"
@@ -12,7 +13,7 @@ const int sectorWidth = 1024;
 typedef uint64_t sectorType;
 const auto sectorTypeWidth = sizeof(sectorType)*8;
 const int sectorTypeWidthPow = log2(sectorTypeWidth);
-const int threadCellCount = 1000;
+std::array<pthread_t*, 3> threads;
 
 struct Config {
     bool edit;
@@ -384,29 +385,28 @@ void* forEachCell(void* _){
 }
 
 void startThreads(Cells& cells, Map& map){
-    const auto size = cells.size();
-    size_t threadCount = size/threadCellCount+1;
-    pthread_t threads[threadCount];
-    Cells nextGenLives[threadCount];
-    Cells nextGenDies[threadCount];
-    void* args[threadCount][6];
-    int start[threadCount];
-    int end[threadCount];
-    for (int i = 0; i < threadCount; i++){
+    const size_t threadCellCount = threads.size()/cells.size();
+    Cells nextGenLives[threads.size()];
+    Cells nextGenDies[threads.size()];
+    void* args[threads.size()][6];
+    int start[threads.size()];
+    int end[threads.size()];
+    for (int i = 0; i < threads.size(); i++){
         start[i] = i*threadCellCount;
-        end[i] = (i+1)*threadCellCount;
-        start[i] = start[i] >= size ? size : start[i];
-        end[i] = end[i] >= size ? size : end[i];
+        end[i] = i+1 == threads.size()? cells.size() : (i+1)*threadCellCount;
         args[i][0] = &cells;
         args[i][1] = &start[i];
         args[i][2] = &end[i];
         args[i][3] = &nextGenLives[i];
         args[i][4] = &nextGenDies[i];
         args[i][5] = &map;
-        pthread_create(&threads[i], NULL, forEachCell, args[i]);
+        if (threads[i] == nullptr){
+            threads[i] = new pthread_t;
+        }
+        pthread_create(threads[i], NULL, forEachCell, args[i]);
     }
-    for (int i = 0; i < threadCount; i++){
-        pthread_join(threads[i], NULL);
+    for (int i = 0; i < threads.size(); i++){
+        pthread_join(*threads[i], NULL);
     }
     cells.clear();
     for (auto& n : nextGenLives){
